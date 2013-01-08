@@ -1511,8 +1511,17 @@ int commander_thread_main(int argc, char *argv[])
 
 			if (low_voltage_counter > LOW_VOLTAGE_BATTERY_COUNTER_LIMIT) {
 				low_battery_voltage_actions_done = true;
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> b48f99b601f96321f7200971550ba07177bad5a1
 				mavlink_log_critical(mavlink_fd, "[cmd] WARNING! LOW BATTERY!");
 				current_status.battery_warning = VEHICLE_BATTERY_WARNING_WARNING;
+<<<<<<< HEAD
+				mavlink_log_critical(mavlink_fd, "[commander] WARNING! LOW BATTERY!");
+>>>>>>> 9a7befef185b03b6a21b3d82af536ed4e35b7284
+=======
+>>>>>>> b48f99b601f96321f7200971550ba07177bad5a1
 			}
 
 			low_voltage_counter++;
@@ -1522,8 +1531,17 @@ int commander_thread_main(int argc, char *argv[])
 		else if (battery_voltage_valid && (bat_remain < 0.1f /* XXX MAGIC NUMBER */) && (false == critical_battery_voltage_actions_done && true == low_battery_voltage_actions_done)) {
 			if (critical_voltage_counter > CRITICAL_VOLTAGE_BATTERY_COUNTER_LIMIT) {
 				critical_battery_voltage_actions_done = true;
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> b48f99b601f96321f7200971550ba07177bad5a1
 				mavlink_log_critical(mavlink_fd, "[cmd] EMERGENCY! CRITICAL BATTERY!");
 				current_status.battery_warning = VEHICLE_BATTERY_WARNING_ALERT;
+<<<<<<< HEAD
+				mavlink_log_critical(mavlink_fd, "[commander] EMERGENCY! CRITICAL BATTERY!");
+>>>>>>> 9a7befef185b03b6a21b3d82af536ed4e35b7284
+=======
+>>>>>>> b48f99b601f96321f7200971550ba07177bad5a1
 				state_machine_emergency(stat_pub, &current_status, mavlink_fd);
 			}
 
