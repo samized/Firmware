@@ -115,13 +115,12 @@ static mavlink_wpm_storage wpm_s;
 mavlink_wpm_storage *wpm = &wpm_s;
 
 bool mavlink_hil_enabled = false;
+int hil_mode = HIL_MODE_STATE;
 
 /* protocol interface */
 static int uart;
 static int baudrate;
 bool gcs_link = true;
-
-int hil_mode = HIL_MODE_SENSORS;
 
 /* interface mode */
 static enum {
@@ -543,7 +542,7 @@ int mavlink_thread_main(int argc, char *argv[])
 	argc -= 2;
 	argv += 2;
 
-	while ((ch = getopt(argc, argv, "b:d:eo")) != EOF) {
+	while ((ch = getopt(argc, argv, "b:d:eos")) != EOF) {
 		switch (ch) {
 		case 'b':
 			baudrate = strtoul(optarg, NULL, 10);
@@ -561,6 +560,11 @@ int mavlink_thread_main(int argc, char *argv[])
 
 		case 'o':
 			mavlink_link_mode = MAVLINK_INTERFACE_MODE_ONBOARD;
+			break;
+
+		case 's':
+			hil_mode = HIL_MODE_SENSORS;
+			warnx("HIL mode preset: sensor hil");
 			break;
 
 		default:
