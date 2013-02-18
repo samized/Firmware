@@ -37,7 +37,7 @@
 # This first group of C files do not depend on having file descriptors or
 # C streams.
 
-CSRCS += lib_fileno.c lib_printf.c lib_rawprintf.c lib_lowprintf.c \
+CSRCS += lib_fileno.c lib_printf.c lib_syslog.c lib_lowsyslog.c\
 		 lib_sprintf.c lib_asprintf.c lib_snprintf.c lib_libsprintf.c \
 		 lib_vsprintf.c lib_avsprintf.c lib_vsnprintf.c lib_libvsprintf.c \
 		 lib_meminstream.c lib_memoutstream.c lib_lowinstream.c \
@@ -59,7 +59,7 @@ CSRCS += lib_fopen.c lib_fclose.c lib_fread.c lib_libfread.c lib_fseek.c \
 		 lib_gets.c lib_fwrite.c lib_libfwrite.c lib_fflush.c \
 		 lib_libflushall.c lib_libfflush.c lib_rdflush.c lib_wrflush.c \
 		 lib_fputc.c lib_puts.c lib_fputs.c lib_ungetc.c lib_vprintf.c \
-		 lib_fprintf.c lib_vfprintf.c lib_stdinstream.c lib_stdoutstream.c \
+		 lib_fprintf.c lib_vfprintf.c lib_vdprintf.c lib_stdinstream.c lib_stdoutstream.c \
 		 lib_perror.c lib_feof.c lib_ferror.c lib_clearerr.c
 
 endif

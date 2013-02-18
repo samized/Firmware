@@ -318,9 +318,11 @@ handle_message(mavlink_message_t *msg)
 			static uint16_t hil_frames = 0;
 			static uint64_t old_timestamp = 0;
 
+			/* sensors general */
+			hil_sensors.timestamp = imu.time_usec;
+
 			/* hil gyro */
 			static const float mrad2rad = 1.0e-3f;
-			hil_sensors.timestamp = timestamp;
 			hil_sensors.gyro_counter = hil_counter;
 			hil_sensors.gyro_raw[0] = imu.xgyro;
 			hil_sensors.gyro_raw[1] = imu.ygyro;
@@ -367,8 +369,8 @@ handle_message(mavlink_message_t *msg)
 			hil_frames += 1 ;
 
 			// output
-			if ((timestamp - old_timestamp) > 1000000) {
-				printf("receiving hil imu at %d hz\n", hil_frames);
+			if ((timestamp - old_timestamp) > 10000000) {
+				printf("receiving hil imu at %d hz\n", hil_frames/10);
 				old_timestamp = timestamp;
 				hil_frames = 0;
 			}
@@ -385,22 +387,22 @@ handle_message(mavlink_message_t *msg)
 			static uint64_t old_timestamp = 0;
 
 			/* gps */
-			hil_gps.timestamp = gps.time_usec;
-			hil_gps.counter = hil_counter++;
+			hil_gps.timestamp_position = gps.time_usec;
+//			hil_gps.counter = hil_counter++;
 			hil_gps.time_gps_usec = gps.time_usec;
 			hil_gps.lat = gps.lat;
 			hil_gps.lon = gps.lon;
 			hil_gps.alt = gps.alt;
-			hil_gps.counter_pos_valid = hil_counter++;
-			hil_gps.eph = gps.eph;
-			hil_gps.epv = gps.epv;
-			hil_gps.s_variance = 100;
-			hil_gps.p_variance = 100;
-			hil_gps.vel = gps.vel;
-			hil_gps.vel_n = gps.vel / 100.0f * cosf(gps.cog / M_RAD_TO_DEG_F / 100.0f);
-			hil_gps.vel_e = gps.vel / 100.0f * sinf(gps.cog / M_RAD_TO_DEG_F / 100.0f);
-			hil_gps.vel_d = 0.0f;
-			hil_gps.cog = gps.cog;
+//			hil_gps.counter_pos_valid = hil_counter++;
+			hil_gps.eph_m = (float)gps.eph * 1e-2f; // from cm to m
+			hil_gps.epv_m = (float)gps.epv * 1e-2f; // from cm to m
+			hil_gps.s_variance_m_s = 100; // XXX 100 m/s variance?
+			hil_gps.p_variance_m = 100; // XXX 100 m variance?
+			hil_gps.vel_m_s = (float)gps.vel * 1e-2f; // from cm/s to m/s
+			hil_gps.vel_n_m_s = (float)gps.vel * 1e-2f * cosf(gps.cog * M_DEG_TO_RAD_F * 1e-2f);
+			hil_gps.vel_e_m_s = (float)gps.vel * 1e-2f * sinf(gps.cog * M_DEG_TO_RAD_F * 1e-2f);
+			hil_gps.vel_d_m_s = 0.0f;
+			hil_gps.cog_rad = gps.cog * M_DEG_TO_RAD_F * 1e-2f; // from deg*100 to rad
 			hil_gps.fix_type = gps.fix_type;
 			hil_gps.satellites_visible = gps.satellites_visible;
 
@@ -412,8 +414,8 @@ handle_message(mavlink_message_t *msg)
 			hil_frames += 1 ;
 
 			// output
-			if ((timestamp - old_timestamp) > 1000000) {
-				printf("receiving hil gps at %d hz\n", hil_frames);
+			if ((timestamp - old_timestamp) > 10000000) {
+				printf("receiving hil gps at %d hz\n", hil_frames/10);
 				old_timestamp = timestamp;
 				hil_frames = 0;
 			}
@@ -428,6 +430,9 @@ handle_message(mavlink_message_t *msg)
 			static uint16_t hil_counter = 0;
 			static uint16_t hil_frames = 0;
 			static uint64_t old_timestamp = 0;
+
+			/* sensors general */
+			hil_sensors.timestamp = press.time_usec;
 
 			/* baro */
 			/* TODO, set ground_press/ temp during calib */
@@ -454,8 +459,8 @@ handle_message(mavlink_message_t *msg)
 			hil_frames += 1 ;
 
 			// output
-			if ((timestamp - old_timestamp) > 1000000) {
-				printf("receiving hil pressure at %d hz\n", hil_frames);
+			if ((timestamp - old_timestamp) > 10000000) {
+				printf("receiving hil pressure at %d hz\n", hil_frames/10);
 				old_timestamp = timestamp;
 				hil_frames = 0;
 			}
@@ -506,7 +511,6 @@ handle_message(mavlink_message_t *msg)
 			hil_attitude.yawspeed = hil_state.yawspeed;
 
 			/* set timestamp and notify processes (broadcast) */
-			hil_attitude.counter++;
 			hil_attitude.timestamp = hrt_absolute_time();
 			orb_publish(ORB_ID(vehicle_attitude), pub_hil_attitude, &hil_attitude);
 		}
@@ -582,12 +586,12 @@ receive_thread(void *arg)
 		struct pollfd fds[] = { { .fd = uart_fd, .events = POLLIN } };
 
 		if (poll(fds, 1, timeout) > 0) {
-			/* non-blocking read */
-			size_t nread = read(uart_fd, buf, sizeof(buf));
-			ASSERT(nread > 0)
+			/* non-blocking read. read may return negative values */
+			ssize_t nread = read(uart_fd, buf, sizeof(buf));
 
-			for (size_t i = 0; i < nread; i++) {
-				if (mavlink_parse_char(chan, buf[i], &msg, &status)) { //parse the char
+			/* if read failed, this loop won't execute */
+			for (ssize_t i = 0; i < nread; i++) {
+				if (mavlink_parse_char(chan, buf[i], &msg, &status)) {
 					/* handle generic messages and commands */
 					handle_message(&msg);
 

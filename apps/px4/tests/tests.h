@@ -48,7 +48,7 @@
 
 #ifdef CONFIG_CPP_HAVE_VARARGS
 #  ifdef CONFIG_DEBUG
-#    define message(...) lib_rawprintf(__VA_ARGS__)
+#    define message(...) lowsyslog(__VA_ARGS__)
 #    define msgflush()
 #  else
 #    define message(...) printf(__VA_ARGS__)
@@ -56,7 +56,7 @@
 #  endif
 #else
 #  ifdef CONFIG_DEBUG
-#    define message lib_rawprintf
+#    define message lowsyslog
 #    define msgflush()
 #  else
 #    define message printf
@@ -93,6 +93,7 @@ extern int	test_uart_send(int argc, char *argv[]);
 extern int	test_sleep(int argc, char *argv[]);
 extern int	test_time(int argc, char *argv[]);
 extern int	test_uart_console(int argc, char *argv[]);
+extern int	test_hott_telemetry(int argc, char *argv[]);
 extern int	test_jig_voltages(int argc, char *argv[]);
 extern int	test_param(int argc, char *argv[]);
 extern int	test_bson(int argc, char *argv[]);

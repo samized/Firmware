@@ -100,6 +100,7 @@ const struct {
 	{"uart_baudchange",	test_uart_baudchange,	OPT_NOJIGTEST | OPT_NOALLTEST},
 	{"uart_send",		test_uart_send,	OPT_NOJIGTEST | OPT_NOALLTEST},
 	{"uart_console",	test_uart_console,	OPT_NOJIGTEST | OPT_NOALLTEST},
+	{"hott_telemetry",	test_hott_telemetry,	OPT_NOJIGTEST | OPT_NOALLTEST},
 	{"tone",		test_tone,	0},
 	{"sleep",		test_sleep,	OPT_NOJIGTEST},
 	{"time",		test_time,	OPT_NOJIGTEST},
@@ -134,6 +135,7 @@ test_all(int argc, char *argv[])
 	unsigned	i;
 	char		*args[2] = {"all", NULL};
 	unsigned int failcount = 0;
+	unsigned int testcount = 0;
 	bool		passed[NTESTS];
 
 	printf("\nRunning all tests...\n\n");
@@ -155,6 +157,7 @@ test_all(int argc, char *argv[])
 				fflush(stdout);
 				passed[i] = true;
 			}
+			testcount++;
 		}
 	}
 
@@ -177,7 +180,7 @@ test_all(int argc, char *argv[])
 		printf("  \\ \\_\\ \\_\\  \\ \\_____\\  \\ \\_____\\     \\ \\_____\\  \\ \\_\\ \\_\\ \n");
 		printf("   \\/_/\\/_/   \\/_____/   \\/_____/      \\/_____/   \\/_/\\/_/ \n");
 		printf("\n");
-		printf(" All tests passed (%d of %d)\n", i, i);
+		printf(" All tests passed (%d of %d)\n", testcount, testcount);
 
 	} else {
 		printf("  ______   ______     __     __ \n");
@@ -186,7 +189,7 @@ test_all(int argc, char *argv[])
 		printf("  \\ \\_\\    \\ \\_\\ \\_\\  \\ \\_\\  \\ \\_____\\ \n");
 		printf("   \\/_/     \\/_/\\/_/   \\/_/   \\/_____/ \n");
 		printf("\n");
-		printf(" Some tests failed (%d of %d)\n", failcount, i);
+		printf(" Some tests failed (%d of %d)\n", failcount, testcount);
 	}
 
 	printf("\n");
@@ -244,6 +247,7 @@ int test_jig(int argc, char *argv[])
 	unsigned	i;
 	char		*args[2] = {"jig", NULL};
 	unsigned int failcount = 0;
+	unsigned int testcount = 0;
 	bool		passed[NTESTS];
 
 	printf("\nRunning all tests...\n\n");
@@ -263,6 +267,7 @@ int test_jig(int argc, char *argv[])
 				fflush(stdout);
 				passed[i] = true;
 			}
+			testcount++;
 		}
 	}
 
@@ -283,7 +288,7 @@ int test_jig(int argc, char *argv[])
 		printf("  \\ \\_\\ \\_\\  \\ \\_____\\  \\ \\_____\\     \\ \\_____\\  \\ \\_\\ \\_\\ \n");
 		printf("   \\/_/\\/_/   \\/_____/   \\/_____/      \\/_____/   \\/_/\\/_/ \n");
 		printf("\n");
-		printf(" All tests passed (%d of %d)\n", i, i);
+		printf(" All tests passed (%d of %d)\n", testcount, testcount);
 	} else {
 		printf("  ______   ______     __     __ \n");
 		printf(" /\\  ___\\ /\\  __ \\   /\\ \\   /\\ \\    \n");
@@ -291,7 +296,7 @@ int test_jig(int argc, char *argv[])
 		printf("  \\ \\_\\    \\ \\_\\ \\_\\  \\ \\_\\  \\ \\_____\\ \n");
 		printf("   \\/_/     \\/_/\\/_/   \\/_/   \\/_____/ \n");
 		printf("\n");
-		printf(" Some tests failed (%d of %d)\n", failcount, i);
+		printf(" Some tests failed (%d of %d)\n", failcount, testcount);
 	}
 	printf("\n");
 

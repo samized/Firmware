@@ -23,7 +23,8 @@ ROMFS_FSSPEC	:= $(SRCROOT)/scripts/rcS~init.d/rcS \
 		   $(SRCROOT)/scripts/rc.PX4IOAR~init.d/rc.PX4IOAR \
 		   $(SRCROOT)/scripts/rc.FMU_quad_x~init.d/rc.FMU_quad_x \
 		   $(SRCROOT)/mixers/FMU_pass.mix~mixers/FMU_pass.mix \
-		   $(SRCROOT)/mixers/FMU_delta.mix~mixers/FMU_delta.mix \
+		   $(SRCROOT)/mixers/FMU_Q.mix~mixers/FMU_Q.mix \
+		   $(SRCROOT)/mixers/FMU_X5.mix~mixers/FMU_X5.mix \
 		   $(SRCROOT)/mixers/FMU_AERT.mix~mixers/FMU_AERT.mix \
 		   $(SRCROOT)/mixers/FMU_AET.mix~mixers/FMU_AET.mix \
 		   $(SRCROOT)/mixers/FMU_RET.mix~mixers/FMU_ERT.mix \
@@ -34,6 +35,10 @@ ROMFS_FSSPEC	:= $(SRCROOT)/scripts/rcS~init.d/rcS \
 		   $(SRCROOT)/mixers/FMU_octo_x.mix~mixers/FMU_octo_x.mix \
 		   $(SRCROOT)/mixers/FMU_octo_+.mix~mixers/FMU_octo_+.mix \
 		   $(SRCROOT)/logging/logconv.m~logging/logconv.m
+
+# the EXTERNAL_SCRIPTS variable is used to add out of tree scripts
+# to ROMFS. 
+ROMFS_FSSPEC += $(EXTERNAL_SCRIPTS)
 
 #
 # Add the PX4IO firmware to the spec if someone has dropped it into the

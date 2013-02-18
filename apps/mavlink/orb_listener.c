@@ -115,6 +115,7 @@ static void	l_debug_key_value(struct listener *l);
 static void	l_optical_flow(struct listener *l);
 static void	l_omnidirectional_flow(struct listener *l);
 static void	l_vehicle_rates_setpoint(struct listener *l);
+static void	l_home(struct listener *l);
 
 struct listener listeners[] = {
 	{l_sensor_combined,		&mavlink_subs.sensor_sub,	0},
@@ -139,6 +140,7 @@ struct listener listeners[] = {
 	{l_optical_flow,		&mavlink_subs.optical_flow,	0},
 	{l_omnidirectional_flow,		&mavlink_subs.omnidirectional_flow,	0},
 	{l_vehicle_rates_setpoint,	&mavlink_subs.rates_setpoint_sub,	0},
+	{l_home,			&mavlink_subs.home_sub,		0},
 };
 
 static const unsigned n_listeners = sizeof(listeners) / sizeof(listeners[0]);
@@ -231,15 +233,15 @@ l_vehicle_gps_position(struct listener *l)
 
 	/* GPS position */
 	mavlink_msg_gps_raw_int_send(MAVLINK_COMM_0,
-				     gps.timestamp,
+				     gps.timestamp_position,
 				     gps.fix_type,
 				     gps.lat,
 				     gps.lon,
 				     gps.alt,
-				     gps.eph,
-				     gps.epv,
-				     gps.vel,
-				     gps.cog,
+				     (uint16_t)(gps.eph_m * 1e2f), // from m to cm
+				     (uint16_t)(gps.epv_m * 1e2f), // from m to cm
+				     (uint16_t)(gps.vel_m_s * 1e2f), // from m/s to cm/s
+				     (uint16_t)(gps.cog_rad * M_RAD_TO_DEG_F * 1e2f), // from rad to deg * 100
 				     gps.satellites_visible);
 
 	if (gps.satellite_info_available && (gps_counter % 4 == 0)) {
@@ -634,6 +636,16 @@ l_omnidirectional_flow(struct listener *l)
 			omnidirectional_flow.left, omnidirectional_flow.right, omnidirectional_flow.quality, omnidirectional_flow.front_distance_m);
 }
 
+void
+l_home(struct listener *l)
+{
+	struct home_position_s home;
+
+	orb_copy(ORB_ID(home_position), mavlink_subs.home_sub, &home);
+
+	mavlink_msg_gps_global_origin_send(MAVLINK_COMM_0, home.lat, home.lon, home.alt);
+}
+
 static void *
 uorb_receive_thread(void *arg)
 {
@@ -699,7 +711,11 @@ uorb_receive_start(void)
 
 	/* --- GPS VALUE --- */
 	mavlink_subs.gps_sub = orb_subscribe(ORB_ID(vehicle_gps_position));
-	orb_set_interval(mavlink_subs.gps_sub, 1000);	/* 1Hz updates */
+	orb_set_interval(mavlink_subs.gps_sub, 200);	/* 5Hz updates */
+
+	/* --- HOME POSITION --- */
+	mavlink_subs.home_sub = orb_subscribe(ORB_ID(home_position));
+	orb_set_interval(mavlink_subs.home_sub, 1000);	/* 1Hz updates */
 
 	/* --- SYSTEM STATE --- */
 	status_sub = orb_subscribe(ORB_ID(vehicle_status));
@@ -715,7 +731,7 @@ uorb_receive_start(void)
 
 	/* --- GLOBAL POS VALUE --- */
 	mavlink_subs.global_pos_sub = orb_subscribe(ORB_ID(vehicle_global_position));
-	orb_set_interval(mavlink_subs.global_pos_sub, 1000);	/* 1Hz active updates */
+	orb_set_interval(mavlink_subs.global_pos_sub, 100);	/* 10 Hz active updates */
 
 	/* --- LOCAL POS VALUE --- */
 	mavlink_subs.local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
