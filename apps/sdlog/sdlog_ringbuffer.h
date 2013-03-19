@@ -56,7 +56,7 @@ struct sdlog_sysvector {
 	float vbat;				/**< battery voltage in [volt] */
 	float bat_current;		/**< battery discharge current */
 	float bat_discharged;	/**< discharged energy in mAh */
-	float adc[3];			/**< remaining auxiliary ADC ports [volt] */
+	float adc[4];			/**< ADC ports [volt] */
 	float local_position[3];	/**< tangent plane mapping into x,y,z [m] */
 	int32_t gps_raw_position[3];	/**< latitude [degrees] north, longitude [degrees] east, altitude above MSL [millimeter] */
 	float attitude[3];		/**< roll, pitch, yaw [rad] */
@@ -65,6 +65,7 @@ struct sdlog_sysvector {
 	float control_effective[4]; 	/**< roll, pitch, yaw [-1..1], thrust [0..1] */
 	float optical_flow[6];			/**< flow raw x, y, flow metric x, y, flow ground dist, flow quality */
 	float omnidirectional_flow[22];	/**< flow left 1-10, flow right 1-10, flow front dist, flow quality */
+	float discrete_radar[32];	/**< flow left 1-10, flow right 1-10, flow front dist, flow quality */
 	float diff_pressure;	/**< differential pressure */
 	float ind_airspeed;		/**< indicated airspeed */
 	float true_airspeed;	/**< true airspeed */

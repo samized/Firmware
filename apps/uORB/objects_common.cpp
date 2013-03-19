@@ -53,6 +53,9 @@ ORB_DEFINE(sensor_gyro, struct gyro_report);
 #include <drivers/drv_baro.h>
 ORB_DEFINE(sensor_baro, struct baro_report);
 
+#include <drivers/drv_range_finder.h>
+ORB_DEFINE(sensor_range_finder, struct range_finder_report);
+
 #include <drivers/drv_pwm_output.h>
 ORB_DEFINE(output_pwm, struct pwm_output_values);
 
@@ -118,6 +121,9 @@ ORB_DEFINE(optical_flow, struct optical_flow_s);
 
 #include "topics/omnidirectional_flow.h"
 ORB_DEFINE(omnidirectional_flow, struct omnidirectional_flow_s);
+
+#include "topics/discrete_radar.h"
+ORB_DEFINE(discrete_radar, struct discrete_radar_s);
 
 #include "topics/differential_pressure.h"
 ORB_DEFINE(differential_pressure, struct differential_pressure_s);
