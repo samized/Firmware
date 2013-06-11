@@ -60,9 +60,9 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_local_position.h>
-#include <uORB/topics/vehicle_bodyframe_position.h>
 #include <uORB/topics/sensor_combined.h>
 #include <uORB/topics/optical_flow.h>
+#include <uORB/topics/filtered_bottom_flow.h>
 #include <systemlib/perf_counter.h>
 #include <poll.h>
 
@@ -182,7 +182,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 	/* subscribe to optical flow*/
 	int optical_flow_sub = orb_subscribe(ORB_ID(optical_flow));
 
-	/* init position local/bodyframe position */
+	/* init local position and filtered flow struct */
 	struct vehicle_local_position_s local_pos = {
 			.x = 0.0f,
 			.y = 0.0f,
@@ -191,18 +191,16 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 			.vy = 0.0f,
 			.vz = 0.0f
 	};
-	struct vehicle_bodyframe_position_s bodyframe_pos = {
-			.x = 0.0f,
-			.y = 0.0f,
-			.z = 0.0f,
+	struct filtered_bottom_flow_s filtered_flow = {
+			.sumx = 0.0f,
+			.sumy = 0.0f,
 			.vx = 0.0f,
-			.vy = 0.0f,
-			.vz = 0.0f
+			.vy = 0.0f
 	};
 
-	/* advert position messages */
+	/* advert pub messages */
 	orb_advert_t local_pos_pub = orb_advertise(ORB_ID(vehicle_local_position), &local_pos);
-	orb_advert_t bodyframe_pos_pub = orb_advertise(ORB_ID(vehicle_bodyframe_position), &bodyframe_pos);
+	orb_advert_t filtered_flow_pub = orb_advertise(ORB_ID(filtered_bottom_flow), &filtered_flow);
 
 	/* vehicle flying status parameters */
 	bool vehicle_liftoff = false;
@@ -299,7 +297,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					/* only make position update if vehicle is lift off or DEBUG is activated*/
 					if (vehicle_liftoff || params.debug)
 					{
-						/*copy flow */
+						/* copy flow */
 						flow_speed[0] = flow.flow_comp_x_m;
 						flow_speed[1] = flow.flow_comp_y_m;
 						flow_speed[2] = 0.0f;
@@ -314,15 +312,17 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 							speed[i] = sum;
 						}
 
-						/* update bodyframe position */
-						bodyframe_pos.x = bodyframe_pos.x + speed[0] * dt;
-						bodyframe_pos.y = bodyframe_pos.y + speed[1] * dt;
-						bodyframe_pos.vx = speed[0];
-						bodyframe_pos.vy = speed[1];
+						/* update filtered flow */
+						filtered_flow.sumx = filtered_flow.sumx + speed[0] * dt;
+						filtered_flow.sumy = filtered_flow.sumy + speed[1] * dt;
+						filtered_flow.vx = speed[0];
+						filtered_flow.vy = speed[1];
 
 						// TODO add yaw rotation correction (with distance to vehicle zero)
 
-						/* convert to globalframe velocity -> not used for position control */
+						/* convert to globalframe velocity
+						 * -> local position is currently not used for position control
+						 */
 						for(uint8_t i = 0; i < 3; i++)
 						{
 							float sum = 0.0f;
@@ -340,8 +340,8 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					else
 					{
 						/* set speed to zero and let position as it is */
-						bodyframe_pos.vx = 0;
-						bodyframe_pos.vy = 0;
+						filtered_flow.vx = 0;
+						filtered_flow.vy = 0;
 						local_pos.vx = 0;
 						local_pos.vy = 0;
 					}
@@ -356,7 +356,6 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					{
 						/* not possible to fly */
 						sonar_valid = false;
-						bodyframe_pos.z = 0.0f;
 						local_pos.z = 0.0f;
 					}
 
@@ -375,31 +374,28 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 						/* if over 1/2m spike follow lowpass */
 						if (height_diff < -params.sonar_lower_lp_threshold || height_diff > params.sonar_upper_lp_threshold)
 						{
-							bodyframe_pos.z = -sonar_lp;
 							local_pos.z = -sonar_lp;
 						}
 						else
 						{
-							bodyframe_pos.z = -sonar;
 							local_pos.z = -sonar;
 						}
 					}
 
-					bodyframe_pos.timestamp = hrt_absolute_time();
+					filtered_flow.timestamp = hrt_absolute_time();
 					local_pos.timestamp = hrt_absolute_time();
-
-					/* publish bodyframe position */
-					if(isfinite(bodyframe_pos.x) && isfinite(bodyframe_pos.y) && isfinite(bodyframe_pos.z)
-											&& isfinite(bodyframe_pos.vx) && isfinite(bodyframe_pos.vy))
-					{
-						orb_publish(ORB_ID(vehicle_bodyframe_position), bodyframe_pos_pub, &bodyframe_pos);
-					}
 
 					/* publish local position */
 					if(isfinite(local_pos.x) && isfinite(local_pos.y) && isfinite(local_pos.z)
 							&& isfinite(local_pos.vx) && isfinite(local_pos.vy))
 					{
 						orb_publish(ORB_ID(vehicle_local_position), local_pos_pub, &local_pos);
+					}
+
+					/* publish filtered flow */
+					if(isfinite(filtered_flow.sumx) && isfinite(filtered_flow.sumy) && isfinite(filtered_flow.vx) && isfinite(filtered_flow.vy))
+					{
+						orb_publish(ORB_ID(filtered_bottom_flow), filtered_flow_pub, &filtered_flow);
 					}
 
 					/* measure in what intervals the position estimator runs */

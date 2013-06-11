@@ -86,9 +86,6 @@ ORB_DEFINE(vehicle_global_position, struct vehicle_global_position_s);
 #include "topics/vehicle_local_position.h"
 ORB_DEFINE(vehicle_local_position, struct vehicle_local_position_s);
 
-#include "topics/vehicle_bodyframe_position.h"
-ORB_DEFINE(vehicle_bodyframe_position, struct vehicle_bodyframe_position_s);
-
 #include "topics/vehicle_vicon_position.h"
 ORB_DEFINE(vehicle_vicon_position, struct vehicle_vicon_position_s);
 
@@ -133,6 +130,9 @@ ORB_DEFINE(offboard_control_setpoint, struct offboard_control_setpoint_s);
 
 #include "topics/optical_flow.h"
 ORB_DEFINE(optical_flow, struct optical_flow_s);
+
+#include "topics/filtered_bottom_flow.h"
+ORB_DEFINE(filtered_bottom_flow, struct filtered_bottom_flow_s);
 
 #include "topics/omnidirectional_flow.h"
 ORB_DEFINE(omnidirectional_flow, struct omnidirectional_flow_s);

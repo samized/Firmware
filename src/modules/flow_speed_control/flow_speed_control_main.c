@@ -58,8 +58,8 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
-#include <uORB/topics/vehicle_bodyframe_position.h>
 #include <uORB/topics/vehicle_bodyframe_speed_setpoint.h>
+#include <uORB/topics/filtered_bottom_flow.h>
 #include <systemlib/systemlib.h>
 #include <systemlib/perf_counter.h>
 #include <systemlib/err.h>
@@ -156,7 +156,7 @@ flow_speed_control_thread_main(int argc, char *argv[])
 
 	/* structures */
 	struct vehicle_status_s vstatus;
-	struct vehicle_bodyframe_position_s bodyframe_pos;
+	struct filtered_bottom_flow_s filtered_flow;
 	struct vehicle_bodyframe_speed_setpoint_s speed_sp;
 
 	struct vehicle_attitude_setpoint_s att_sp;
@@ -165,7 +165,7 @@ flow_speed_control_thread_main(int argc, char *argv[])
 	int parameter_update_sub = orb_subscribe(ORB_ID(parameter_update));
 	int vehicle_attitude_sub = orb_subscribe(ORB_ID(vehicle_attitude));
 	int vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
-	int vehicle_bodyframe_position_sub = orb_subscribe(ORB_ID(vehicle_bodyframe_position));
+	int filtered_bottom_flow_sub = orb_subscribe(ORB_ID(filtered_bottom_flow));
 	int vehicle_bodyframe_speed_setpoint_sub = orb_subscribe(ORB_ID(vehicle_bodyframe_speed_setpoint));
 
 	orb_advert_t att_sp_pub;
@@ -228,16 +228,16 @@ flow_speed_control_thread_main(int argc, char *argv[])
 
 					/* get a local copy of the vehicle state */
 					orb_copy(ORB_ID(vehicle_status), vehicle_status_sub, &vstatus);
-					/* get a local copy of bodyframe position */
-					orb_copy(ORB_ID(vehicle_bodyframe_position), vehicle_bodyframe_position_sub, &bodyframe_pos);
+					/* get a local copy of filtered bottom flow */
+					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 					/* get a local copy of bodyframe speed setpoint */
 					orb_copy(ORB_ID(vehicle_bodyframe_speed_setpoint), vehicle_bodyframe_speed_setpoint_sub, &speed_sp);
 
 					if (vstatus.state_machine == SYSTEM_STATE_AUTO)
 					{
 						/* calc new roll/pitch */
-						float pitch_body = -(speed_sp.vx - bodyframe_pos.vx) * params.speed_p;
-						float roll_body  =  (speed_sp.vy - bodyframe_pos.vy) * params.speed_p;
+						float pitch_body = -(speed_sp.vx - filtered_flow.vx) * params.speed_p;
+						float roll_body  =  (speed_sp.vy - filtered_flow.vy) * params.speed_p;
 
 						/* limit roll and pitch corrections */
 						if((pitch_body <= params.limit_pitch) && (pitch_body >= -params.limit_pitch))
@@ -349,7 +349,7 @@ flow_speed_control_thread_main(int argc, char *argv[])
 	close(parameter_update_sub);
 	close(vehicle_attitude_sub);
 	close(vehicle_bodyframe_speed_setpoint_sub);
-	close(vehicle_bodyframe_position_sub);
+	close(filtered_bottom_flow_sub);
 	close(vehicle_status_sub);
 	close(att_sp_pub);
 

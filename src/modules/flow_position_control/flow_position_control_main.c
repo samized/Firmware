@@ -58,10 +58,10 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/manual_control_setpoint.h>
-#include <uORB/topics/vehicle_bodyframe_position.h>
-#include <uORB/topics/vehicle_bodyframe_position_setpoint.h>
+#include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_bodyframe_speed_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/filtered_bottom_flow.h>
 #include <systemlib/systemlib.h>
 #include <systemlib/perf_counter.h>
 #include <systemlib/err.h>
@@ -160,22 +160,20 @@ flow_position_control_thread_main(int argc, char *argv[])
 	struct vehicle_status_s vstatus;
 	struct vehicle_attitude_s att;
 	struct manual_control_setpoint_s manual;
-	struct vehicle_bodyframe_position_s bodyframe_pos;
-	struct vehicle_bodyframe_position_setpoint_s bodyframe_pos_sp;
+	struct filtered_bottom_flow_s filtered_flow;
+	struct vehicle_local_position_s local_pos;
 
 	struct vehicle_bodyframe_speed_setpoint_s speed_sp;
-	struct vehicle_local_position_setpoint_s debug_speed_sp;
 
 	/* subscribe to attitude, motor setpoints and system state */
 	int parameter_update_sub = orb_subscribe(ORB_ID(parameter_update));
 	int vehicle_attitude_sub = orb_subscribe(ORB_ID(vehicle_attitude));
 	int vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	int manual_control_setpoint_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
-	int vehicle_bodyframe_position_sub = orb_subscribe(ORB_ID(vehicle_bodyframe_position));
-	int vehicle_bodyframe_position_setpoint_sub = orb_subscribe(ORB_ID(vehicle_bodyframe_position_setpoint));
+	int filtered_bottom_flow_sub = orb_subscribe(ORB_ID(filtered_bottom_flow));
+	int vehicle_local_position_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 
 	orb_advert_t speed_sp_pub;
-	orb_advert_t debug_speed_sp_pub;
 	bool speed_setpoint_adverted = false;
 
 	/* parameters init*/
@@ -184,17 +182,19 @@ flow_position_control_thread_main(int argc, char *argv[])
 	parameters_init(&param_handles);
 	parameters_update(&param_handles, &params);
 
-	/* init bodyframe position setpoint */
-	bodyframe_pos_sp.x = 0.0f;
-	bodyframe_pos_sp.y = 0.0f;
-	bodyframe_pos_sp.yaw = 0.0f;
+	/* init flow sum setpoint */
+	float flow_sp_sumx = 0.0f;
+	float flow_sp_sumy = 0.0f;
+
+	/* init yaw setpoint */
+	float yaw_sp = 0.0f;
 
 	/* states */
 	float integrated_h_error = 0.0f;
 	float last_height = 0.0f;
 	float thrust_limit_upper = params.limit_thrust_upper; // it will be updated with manual input
-	bool update_bodyframe_position_sp_x = false;
-	bool update_bodyframe_position_sp_y = false;
+	bool update_flow_sp_sumx = false;
+	bool update_flow_sp_sumy = false;
 
 	/* register the perf counter */
 	perf_counter_t mc_loop_perf = perf_alloc(PC_ELAPSED, "flow_position_control_runtime");
@@ -210,7 +210,7 @@ flow_position_control_thread_main(int argc, char *argv[])
 		{
 			/* polling */
 			struct pollfd fds[2] = {
-				{ .fd = vehicle_bodyframe_position_sub, .events = POLLIN }, // positions from estimator
+				{ .fd = filtered_bottom_flow_sub, .events = POLLIN }, // positions from estimator
 				{ .fd = parameter_update_sub,   .events = POLLIN }
 
 			};
@@ -226,7 +226,7 @@ flow_position_control_thread_main(int argc, char *argv[])
 			else if (ret == 0)
 			{
 				/* no return value, ignore */
-//				printf("[flow position control] no bodyframe position updates\n");
+//				printf("[flow position control] no filtered flow updates\n");
 			}
 			else
 			{
@@ -252,26 +252,28 @@ flow_position_control_thread_main(int argc, char *argv[])
 					orb_copy(ORB_ID(manual_control_setpoint), manual_control_setpoint_sub, &manual);
 					/* get a local copy of attitude */
 					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
-					/* get a local copy of bodyframe position */
-					orb_copy(ORB_ID(vehicle_bodyframe_position), vehicle_bodyframe_position_sub, &bodyframe_pos);
+					/* get a local copy of filtered bottom flow */
+					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
+					/* get a local copy of local position */
+					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
 
 					if (vstatus.state_machine == SYSTEM_STATE_AUTO)
 					{
-						/* update bodyframe position according to manual input */
-						if (update_bodyframe_position_sp_x)
+						/* update flow sum setpoint */
+						if (update_flow_sp_sumx)
 						{
-							bodyframe_pos_sp.x = bodyframe_pos.x;
-							update_bodyframe_position_sp_x = false;
+							flow_sp_sumx = filtered_flow.sumx;
+							update_flow_sp_sumx = false;
 						}
-						if (update_bodyframe_position_sp_y)
+						if (update_flow_sp_sumy)
 						{
-							bodyframe_pos_sp.y = bodyframe_pos.y;
-							update_bodyframe_position_sp_y = false;
+							flow_sp_sumy = filtered_flow.sumy;
+							update_flow_sp_sumy = false;
 						}
 
-						/* calc new roll/pitch */
-						float speed_body_x = (bodyframe_pos_sp.x - bodyframe_pos.x) * params.pos_p - bodyframe_pos.vx * params.pos_d;
-						float speed_body_y = (bodyframe_pos_sp.y - bodyframe_pos.y) * params.pos_p - bodyframe_pos.vy * params.pos_d;
+						/* calc new bodyframe speed setpoints */
+						float speed_body_x = (flow_sp_sumx - filtered_flow.sumx) * params.pos_p - filtered_flow.vx * params.pos_d;
+						float speed_body_y = (flow_sp_sumy - filtered_flow.sumy) * params.pos_p - filtered_flow.vy * params.pos_d;
 
 						/* overwrite with rc input if there is any */
 						if(isfinite(manual.pitch) && isfinite(manual.roll))
@@ -279,13 +281,13 @@ flow_position_control_thread_main(int argc, char *argv[])
 							if(fabsf(manual.pitch) > params.manual_xy_min_abs)
 							{
 								speed_body_x = -manual.pitch / params.manual_xy_max_abs * params.limit_speed_x;
-								update_bodyframe_position_sp_x = true;
+								update_flow_sp_sumx = true;
 							}
 
 							if(fabsf(manual.roll) > params.manual_xy_min_abs)
 							{
 								speed_body_y = manual.roll / params.manual_xy_max_abs * params.limit_speed_y;
-								update_bodyframe_position_sp_y = true;
+								update_flow_sp_sumy = true;
 							}
 						}
 
@@ -317,23 +319,23 @@ flow_position_control_thread_main(int argc, char *argv[])
 						/* manual yaw change */
 						if(isfinite(manual.yaw))
 						{
-							if(fabsf(manual.yaw) > params.manual_yaw_min_abs) // bigger threshold because of rc calibration for manual flight
+							if(fabsf(manual.yaw) > params.manual_yaw_min_abs)
 							{
-								bodyframe_pos_sp.yaw += manual.yaw / params.manual_yaw_max_abs * params.limit_yaw_step;
+								yaw_sp += manual.yaw / params.manual_yaw_max_abs * params.limit_yaw_step;
 
 								/* modulo for rotation -pi +pi */
-								if(bodyframe_pos_sp.yaw < -M_PI_F)
-									bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw + M_TWOPI_F;
-								else if(bodyframe_pos_sp.yaw > M_PI_F)
-									bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw - M_TWOPI_F;
+								if(yaw_sp < -M_PI_F)
+									yaw_sp = yaw_sp + M_TWOPI_F;
+								else if(yaw_sp > M_PI_F)
+									yaw_sp = yaw_sp - M_TWOPI_F;
 							}
 						}
 
 						/* forward yaw setpoint */
-						speed_sp.yaw_sp = bodyframe_pos_sp.yaw;
+						speed_sp.yaw_sp = yaw_sp;
 
 						/* calc new thrust */
-						float height_error = (bodyframe_pos.z - params.height_sp);
+						float height_error = (local_pos.z - params.height_sp);
 						integrated_h_error = integrated_h_error + height_error;
 						float integrated_thrust_addition = integrated_h_error * params.height_i;
 
@@ -342,8 +344,8 @@ flow_position_control_thread_main(int argc, char *argv[])
 						if(integrated_thrust_addition < -params.limit_thrust_int)
 							integrated_thrust_addition = -params.limit_thrust_int;
 
-						float height_speed = last_height - bodyframe_pos.z;
-						last_height = bodyframe_pos.z;
+						float height_speed = last_height - local_pos.z;
+						last_height = local_pos.z;
 						float thrust_diff = height_error * params.height_p - height_speed * params.height_d; // just PD controller
 						float thrust = thrust_diff + integrated_thrust_addition;
 
@@ -370,22 +372,16 @@ flow_position_control_thread_main(int argc, char *argv[])
 						speed_sp.thrust_sp = height_ctrl_thrust;
 						speed_sp.timestamp = hrt_absolute_time();
 
-						/* publish new attitude setpoint */
+						/* publish new speed setpoint */
 						if(isfinite(speed_sp.vx) && isfinite(speed_sp.vy) && isfinite(speed_sp.yaw_sp) && isfinite(speed_sp.thrust_sp))
 						{
-							debug_speed_sp.x = speed_sp.vx;
-							debug_speed_sp.y = speed_sp.vy;
-							debug_speed_sp.yaw = speed_sp.yaw_sp;
-							debug_speed_sp.z = speed_sp.thrust_sp;
 
 							if(speed_setpoint_adverted)
 							{
-								orb_publish(ORB_ID(vehicle_local_position_setpoint), debug_speed_sp_pub, &debug_speed_sp);
 								orb_publish(ORB_ID(vehicle_bodyframe_speed_setpoint), speed_sp_pub, &speed_sp);
 							}
 							else
 							{
-								debug_speed_sp_pub = orb_advertise(ORB_ID(vehicle_local_position_setpoint), &debug_speed_sp);
 								speed_sp_pub = orb_advertise(ORB_ID(vehicle_bodyframe_speed_setpoint), &speed_sp);
 								speed_setpoint_adverted = true;
 							}
@@ -397,14 +393,16 @@ flow_position_control_thread_main(int argc, char *argv[])
 					}
 					else
 					{
-						/* in manual or stabilized state just reset speed and position setpoint */
+						/* in manual or stabilized state just reset speed and flow sum setpoint */
 						speed_sp.vx = 0.0f;
 						speed_sp.vy = 0.0f;
-						bodyframe_pos_sp.x = bodyframe_pos.x;
-						bodyframe_pos_sp.y = bodyframe_pos.y;
+						flow_sp_sumx = filtered_flow.sumx;
+						flow_sp_sumy = filtered_flow.sumy;
 						if(isfinite(att.yaw))
+						{
+							yaw_sp = att.yaw;
 							speed_sp.yaw_sp = att.yaw;
-						bodyframe_pos_sp.yaw = att.yaw;
+						}
 						if(isfinite(manual.throttle))
 							speed_sp.thrust_sp = manual.throttle;
 					}
@@ -456,8 +454,7 @@ flow_position_control_thread_main(int argc, char *argv[])
 
 	close(parameter_update_sub);
 	close(vehicle_attitude_sub);
-	close(vehicle_bodyframe_position_setpoint_sub);
-	close(vehicle_bodyframe_position_sub);
+	close(vehicle_local_position_sub);
 	close(vehicle_status_sub);
 	close(manual_control_setpoint_sub);
 	close(speed_sp_pub);

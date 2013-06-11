@@ -34,12 +34,12 @@
  ****************************************************************************/
 
 /**
- * @file vehicle_bodyframe_position.h
- * Definition of the bodyframe position uORB topic.
+ * @file filtered_bottom_flow.h
+ * Definition of the filtered bottom flow uORB topic.
  */
 
-#ifndef TOPIC_VEHICLE_BODYFRAME_POSITION_H_
-#define TOPIC_VEHICLE_BODYFRAME_POSITION_H_
+#ifndef TOPIC_FILTERED_BOTTOM_FLOW_H_
+#define TOPIC_FILTERED_BOTTOM_FLOW_H_
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -51,31 +51,17 @@
  */
 
 /**
- * Position in bodyframe.
+ * Filtered bottom flow in bodyframe.
  */
-struct vehicle_bodyframe_position_s
+struct filtered_bottom_flow_s
 {
 	uint64_t timestamp;		/**< time of this estimate, in microseconds since system start */
-	bool valid;				/**< true if position satisfies validity criteria of estimator */
 
-	float x;				/**< X positin in meters in bodyframe 						   */
-	float y;				/**< X positin in meters in bodyframe						   */
-	float z;				/**< Z positin in meters in bodyframe (negative altitude) 	   */
-	float absolute_alt;		/**< Altitude as defined by pressure / GPS, 			LOGME  */
-	float vx; 				/**< Ground X Speed (Latitude), m/s						LOGME  */
-	float vy;				/**< Ground Y Speed (Longitude), m/s 					LOGME  */
-	float vz;				/**< Ground Z Speed (Altitude), m/s						LOGME  */
-	float hdg; 				/**< Compass heading in radians -PI..+PI.					   */
+	float sumx;				/**< Integrated bodyframe x flow in meters					   */
+	float sumy;				/**< Integrated bodyframe y flow in meters			   		   */
 
-	// TODO Add covariances here
-
-	/* Reference position in GPS / WGS84 frame */
-	uint64_t home_timestamp;/**< Time when home position was set						   */
-	int32_t home_lat;		/**< Latitude in 1E7 degrees							LOGME  */
-	int32_t home_lon;		/**< Longitude in 1E7 degrees							LOGME  */
-	float home_alt;			/**< Altitude in meters									LOGME  */
-	float home_hdg; 		/**< Compass heading in radians -PI..+PI.					   */
-
+	float vx; 				/**< Flow bodyframe x speed, m/s							   */
+	float vy;				/**< Flow bodyframe y Speed, m/s 							   */
 };
 
 /**
@@ -83,6 +69,6 @@ struct vehicle_bodyframe_position_s
  */
 
 /* register this as object request broker structure */
-ORB_DECLARE(vehicle_bodyframe_position);
+ORB_DECLARE(filtered_bottom_flow);
 
 #endif
