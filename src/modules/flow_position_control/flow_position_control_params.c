@@ -45,7 +45,9 @@ PARAM_DEFINE_FLOAT(FPC_POS_D, 0.0f);
 PARAM_DEFINE_FLOAT(FPC_H_P, 0.15f);
 PARAM_DEFINE_FLOAT(FPC_H_I, 0.00001f);
 PARAM_DEFINE_FLOAT(FPC_H_D, 0.8f);
-PARAM_DEFINE_FLOAT(FPC_H_SP, -0.8f);
+PARAM_DEFINE_FLOAT(FPC_H_STEP, 0.05f);
+PARAM_DEFINE_FLOAT(FPC_H_MIN, 0.5f);
+PARAM_DEFINE_FLOAT(FPC_H_MAX, 1.5f);
 PARAM_DEFINE_FLOAT(FPC_T_FFWD, 0.7f);
 PARAM_DEFINE_FLOAT(FPC_L_S_X, 1.0f);
 PARAM_DEFINE_FLOAT(FPC_L_S_Y, 1.0f);
@@ -53,10 +55,8 @@ PARAM_DEFINE_FLOAT(FPC_L_TH_I, 0.05f);
 PARAM_DEFINE_FLOAT(FPC_L_TH_U, 0.8f);
 PARAM_DEFINE_FLOAT(FPC_L_TH_L, 0.6f);
 PARAM_DEFINE_FLOAT(FPC_L_YAW_STEP, 0.02f);
-PARAM_DEFINE_FLOAT(FPC_MAN_XY_MIN, 0.05f);
-PARAM_DEFINE_FLOAT(FPC_MAN_XY_MAX, 0.3f);
-PARAM_DEFINE_FLOAT(FPC_MAN_YAW_MIN, 0.5f);
-PARAM_DEFINE_FLOAT(FPC_MAN_YAW_MAX, 3.0f);
+PARAM_DEFINE_FLOAT(FPC_MAN_THR, 0.1f);
+
 
 int parameters_init(struct flow_position_control_param_handles *h)
 {
@@ -66,7 +66,9 @@ int parameters_init(struct flow_position_control_param_handles *h)
 	h->height_p 			=	param_find("FPC_H_P");
 	h->height_i 			=	param_find("FPC_H_I");
 	h->height_d 			=	param_find("FPC_H_D");
-	h->height_sp 			=	param_find("FPC_H_SP");
+	h->height_step 			=	param_find("FPC_H_STEP");
+	h->height_flight_min	=	param_find("FPC_H_MIN");
+	h->height_flight_max	=	param_find("FPC_H_MAX");
 	h->thrust_feedforward 	=	param_find("FPC_T_FFWD");
 	h->limit_speed_x 		=	param_find("FPC_L_S_X");
 	h->limit_speed_y 		=	param_find("FPC_L_S_Y");
@@ -74,10 +76,10 @@ int parameters_init(struct flow_position_control_param_handles *h)
 	h->limit_thrust_upper 	=	param_find("FPC_L_TH_U");
 	h->limit_thrust_lower 	=	param_find("FPC_L_TH_L");
 	h->limit_yaw_step		=	param_find("FPC_L_YAW_STEP");
-	h->manual_xy_min_abs 	=	param_find("FPC_MAN_XY_MIN");
-	h->manual_xy_max_abs 	=	param_find("FPC_MAN_XY_MAX");
-	h->manual_yaw_min_abs 	=	param_find("FPC_MAN_YAW_MIN");
-	h->manual_yaw_max_abs 	=	param_find("FPC_MAN_YAW_MAX");
+	h->manual_threshold 	=	param_find("FPC_MAN_THR");
+	h->rc_scale_pitch		=   param_find("RC_SCALE_PITCH");
+	h->rc_scale_roll		=   param_find("RC_SCALE_ROLL");
+	h->rc_scale_yaw			=   param_find("RC_SCALE_YAW");
 
 	return OK;
 }
@@ -89,7 +91,9 @@ int parameters_update(const struct flow_position_control_param_handles *h, struc
 	param_get(h->height_p, &(p->height_p));
 	param_get(h->height_i, &(p->height_i));
 	param_get(h->height_d, &(p->height_d));
-	param_get(h->height_sp, &(p->height_sp));
+	param_get(h->height_step, &(p->height_step));
+	param_get(h->height_flight_min, &(p->height_flight_min));
+	param_get(h->height_flight_max, &(p->height_flight_max));
 	param_get(h->thrust_feedforward, &(p->thrust_feedforward));
 	param_get(h->limit_speed_x, &(p->limit_speed_x));
 	param_get(h->limit_speed_y, &(p->limit_speed_y));
@@ -97,10 +101,10 @@ int parameters_update(const struct flow_position_control_param_handles *h, struc
 	param_get(h->limit_thrust_upper, &(p->limit_thrust_upper));
 	param_get(h->limit_thrust_lower, &(p->limit_thrust_lower));
 	param_get(h->limit_yaw_step, &(p->limit_yaw_step));
-	param_get(h->manual_xy_min_abs, &(p->manual_xy_min_abs));
-	param_get(h->manual_xy_max_abs, &(p->manual_xy_max_abs));
-	param_get(h->manual_yaw_min_abs, &(p->manual_yaw_min_abs));
-	param_get(h->manual_yaw_max_abs, &(p->manual_yaw_max_abs));
+	param_get(h->manual_threshold, &(p->manual_threshold));
+	param_get(h->rc_scale_pitch, &(p->rc_scale_pitch));
+	param_get(h->rc_scale_roll, &(p->rc_scale_roll));
+	param_get(h->rc_scale_yaw, &(p->rc_scale_yaw));
 
 	return OK;
 }

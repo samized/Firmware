@@ -189,10 +189,17 @@ flow_position_control_thread_main(int argc, char *argv[])
 	/* init yaw setpoint */
 	float yaw_sp = 0.0f;
 
+	/* init height setpoint */
+	float height_sp = params.height_flight_min;
+
+	/* height controller states */
+	bool start_phase = true;
+	bool landing_initialized = false;
+	float landing_thrust_start = 0.0f;
+
 	/* states */
 	float integrated_h_error = 0.0f;
-	float last_height = 0.0f;
-	float thrust_limit_upper = params.limit_thrust_upper; // it will be updated with manual input
+	float last_local_pos_z = 0.0f;
 	bool update_flow_sp_sumx = false;
 	bool update_flow_sp_sumy = false;
 
@@ -259,6 +266,10 @@ flow_position_control_thread_main(int argc, char *argv[])
 
 					if (vstatus.state_machine == SYSTEM_STATE_AUTO)
 					{
+						float manual_pitch = manual.pitch / params.rc_scale_pitch; // 0 to 1
+						float manual_roll = manual.roll / params.rc_scale_roll; // 0 to 1
+						float manual_yaw = manual.yaw / params.rc_scale_yaw; // -1 to 1
+
 						/* update flow sum setpoint */
 						if (update_flow_sp_sumx)
 						{
@@ -274,54 +285,57 @@ flow_position_control_thread_main(int argc, char *argv[])
 						/* calc new bodyframe speed setpoints */
 						float speed_body_x = (flow_sp_sumx - filtered_flow.sumx) * params.pos_p - filtered_flow.vx * params.pos_d;
 						float speed_body_y = (flow_sp_sumy - filtered_flow.sumy) * params.pos_p - filtered_flow.vy * params.pos_d;
+						float speed_limit_height_factor = height_sp; // the settings are for 1 meter
 
 						/* overwrite with rc input if there is any */
-						if(isfinite(manual.pitch) && isfinite(manual.roll))
+						if(isfinite(manual_pitch) && isfinite(manual_roll))
 						{
-							if(fabsf(manual.pitch) > params.manual_xy_min_abs)
+							if(fabsf(manual_pitch) > params.manual_threshold)
 							{
-								speed_body_x = -manual.pitch / params.manual_xy_max_abs * params.limit_speed_x;
+								speed_body_x = -manual_pitch * params.limit_speed_x * speed_limit_height_factor;
 								update_flow_sp_sumx = true;
 							}
 
-							if(fabsf(manual.roll) > params.manual_xy_min_abs)
+							if(fabsf(manual_roll) > params.manual_threshold)
 							{
-								speed_body_y = manual.roll / params.manual_xy_max_abs * params.limit_speed_y;
+								speed_body_y = manual_roll * params.limit_speed_y * speed_limit_height_factor;
 								update_flow_sp_sumy = true;
 							}
 						}
 
 						/* limit speed setpoints */
-						if((speed_body_x <= params.limit_speed_x) && (speed_body_x >= -params.limit_speed_x))
+						if((speed_body_x <= params.limit_speed_x * speed_limit_height_factor) &&
+								(speed_body_x >= -params.limit_speed_x * speed_limit_height_factor))
 						{
 							speed_sp.vx = speed_body_x;
 						}
 						else
 						{
-							if(speed_body_x > params.limit_speed_x)
-								speed_sp.vx = params.limit_speed_x;
-							if(speed_body_x < -params.limit_speed_x)
-								speed_sp.vx = -params.limit_speed_x;
+							if(speed_body_x > params.limit_speed_x * speed_limit_height_factor)
+								speed_sp.vx = params.limit_speed_x * speed_limit_height_factor;
+							if(speed_body_x < -params.limit_speed_x * speed_limit_height_factor)
+								speed_sp.vx = -params.limit_speed_x * speed_limit_height_factor;
 						}
 
-						if((speed_body_y <= params.limit_speed_y) && (speed_body_y >= -params.limit_speed_y))
+						if((speed_body_y <= params.limit_speed_y * speed_limit_height_factor) &&
+								(speed_body_y >= -params.limit_speed_y * speed_limit_height_factor))
 						{
 							speed_sp.vy = speed_body_y;
 						}
 						else
 						{
-							if(speed_body_y > params.limit_speed_y)
-								speed_sp.vy = params.limit_speed_y;
-							if(speed_body_y < -params.limit_speed_y)
-								speed_sp.vy = -params.limit_speed_y;
+							if(speed_body_y > params.limit_speed_y * speed_limit_height_factor)
+								speed_sp.vy = params.limit_speed_y * speed_limit_height_factor;
+							if(speed_body_y < -params.limit_speed_y * speed_limit_height_factor)
+								speed_sp.vy = -params.limit_speed_y * speed_limit_height_factor;
 						}
 
 						/* manual yaw change */
-						if(isfinite(manual.yaw))
+						if(isfinite(manual_yaw) && isfinite(manual.throttle))
 						{
-							if(fabsf(manual.yaw) > params.manual_yaw_min_abs)
+							if(fabsf(manual_yaw) > params.manual_threshold && manual.throttle > 0.2f)
 							{
-								yaw_sp += manual.yaw / params.manual_yaw_max_abs * params.limit_yaw_step;
+								yaw_sp += manual_yaw * params.limit_yaw_step;
 
 								/* modulo for rotation -pi +pi */
 								if(yaw_sp < -M_PI_F)
@@ -334,42 +348,121 @@ flow_position_control_thread_main(int argc, char *argv[])
 						/* forward yaw setpoint */
 						speed_sp.yaw_sp = yaw_sp;
 
-						/* calc new thrust */
-						float height_error = (local_pos.z - params.height_sp);
-						integrated_h_error = integrated_h_error + height_error;
-						float integrated_thrust_addition = integrated_h_error * params.height_i;
 
-						if(integrated_thrust_addition > params.limit_thrust_int)
-							integrated_thrust_addition = params.limit_thrust_int;
-						if(integrated_thrust_addition < -params.limit_thrust_int)
-							integrated_thrust_addition = -params.limit_thrust_int;
+						/* manual height control
+						 * 0-20%: thrust linear down
+						 * 20%-40%: down
+						 * 40%-60%: stabilize altitude
+						 * 60-100%: up
+						 */
+						float thrust_control = 0.0f;
 
-						float height_speed = last_height - local_pos.z;
-						last_height = local_pos.z;
-						float thrust_diff = height_error * params.height_p - height_speed * params.height_d; // just PD controller
-						float thrust = thrust_diff + integrated_thrust_addition;
-
-						float height_ctrl_thrust = params.thrust_feedforward + thrust;
-
-						/* the throttle stick on the rc control limits the maximum thrust */
-						thrust_limit_upper = params.limit_thrust_upper;
-						if(isfinite(manual.throttle))
+						if (isfinite(manual.throttle))
 						{
-							if (manual.throttle < thrust_limit_upper)
-								thrust_limit_upper = manual.throttle;
+							if (start_phase)
+							{
+								/* control start thrust with stick input */
+								if (manual.throttle < 0.4f)
+								{
+									/* first 40% for up to feedforward */
+									thrust_control = manual.throttle / 0.4f * params.thrust_feedforward;
+								}
+								else
+								{
+									/* second 60% for up to feedforward + 10% */
+									thrust_control = (manual.throttle - 0.4f) / 0.6f * 0.1f + params.thrust_feedforward;
+								}
+
+								/* exit start phase if setpoint is reached */
+								if (height_sp < -local_pos.z && thrust_control > params.limit_thrust_lower)
+								{
+									start_phase = false;
+									/* switch to stabilize */
+									thrust_control = params.thrust_feedforward;
+								}
+							}
+							else
+							{
+								if (manual.throttle < 0.2f)
+								{
+									/* landing initialization */
+									if (!landing_initialized)
+									{
+										/* consider last thrust control to avoid steps */
+										landing_thrust_start = speed_sp.thrust_sp;
+										landing_initialized = true;
+									}
+
+									/* set current height as setpoint to avoid steps */
+									if (-local_pos.z > params.height_flight_min)
+										height_sp = -local_pos.z;
+									else
+										height_sp = params.height_flight_min;
+
+									/* lower 20% stick range controls thrust down */
+									thrust_control = manual.throttle / 0.2f * landing_thrust_start;
+
+									/* assume ground position here */
+									if (thrust_control < 0.1f)
+									{
+										/* reset integral if on ground */
+										integrated_h_error = 0.0f;
+										/* switch to start phase */
+										start_phase = true;
+										/* reset height setpoint */
+										height_sp = params.height_flight_min;
+									}
+								}
+								else
+								{
+									/* stabilized mode */
+
+									landing_initialized = false;
+
+									/* update height setpoint if needed*/
+									if (manual.throttle < 0.4f)
+									{
+										/* down */
+										if (height_sp > params.height_flight_min + params.height_step)
+											height_sp -= params.height_step;
+									}
+
+									if (manual.throttle > 0.6f)
+									{
+										/* up */
+										if (height_sp < params.height_flight_max)
+											height_sp += params.height_step;
+									}
+
+									/* calc new thrust with PID */
+									float height_error = (local_pos.z - (-height_sp));
+									integrated_h_error = integrated_h_error + height_error;
+									float integrated_thrust_addition = integrated_h_error * params.height_i;
+
+									if(integrated_thrust_addition > params.limit_thrust_int)
+										integrated_thrust_addition = params.limit_thrust_int;
+									if(integrated_thrust_addition < -params.limit_thrust_int)
+										integrated_thrust_addition = -params.limit_thrust_int;
+
+									float height_speed = last_local_pos_z - local_pos.z;
+									float thrust_diff = height_error * params.height_p - height_speed * params.height_d;
+
+									thrust_control = params.thrust_feedforward + thrust_diff + integrated_thrust_addition;
+
+									/* set thrust lower limit */
+									if(thrust_control < params.limit_thrust_lower)
+										thrust_control = params.limit_thrust_lower;
+								}
+							}
+
+							/* set thrust upper limit */
+							if(thrust_control > params.limit_thrust_upper)
+								thrust_control = params.limit_thrust_upper;
 						}
+						/* store actual height for speed estimation */
+						last_local_pos_z = local_pos.z;
 
-						/* reset integral if on ground */
-						if (thrust_limit_upper < 0.2f)
-							integrated_h_error = 0.0f;
-
-						/* set thrust within controllable limits */
-						if(height_ctrl_thrust < params.limit_thrust_lower)
-							height_ctrl_thrust = params.limit_thrust_lower;
-						if(height_ctrl_thrust > thrust_limit_upper)
-							height_ctrl_thrust = thrust_limit_upper;
-
-						speed_sp.thrust_sp = height_ctrl_thrust;
+						speed_sp.thrust_sp = thrust_control;
 						speed_sp.timestamp = hrt_absolute_time();
 
 						/* publish new speed setpoint */

@@ -47,7 +47,9 @@ struct flow_position_control_params {
 	float height_p;
 	float height_i;
 	float height_d;
-	float height_sp;
+	float height_step;
+	float height_flight_min;
+	float height_flight_max;
 	float thrust_feedforward;
 	float limit_speed_x;
 	float limit_speed_y;
@@ -55,10 +57,10 @@ struct flow_position_control_params {
 	float limit_thrust_upper;
 	float limit_thrust_lower;
 	float limit_yaw_step;
-	float manual_xy_min_abs;
-	float manual_xy_max_abs;
-	float manual_yaw_min_abs;
-	float manual_yaw_max_abs;
+	float manual_threshold;
+	float rc_scale_pitch;
+	float rc_scale_roll;
+	float rc_scale_yaw;
 };
 
 struct flow_position_control_param_handles {
@@ -67,7 +69,9 @@ struct flow_position_control_param_handles {
 	param_t height_p;
 	param_t height_i;
 	param_t height_d;
-	param_t height_sp;
+	param_t height_step;
+	param_t height_flight_min;
+	param_t height_flight_max;
 	param_t thrust_feedforward;
 	param_t limit_speed_x;
 	param_t limit_speed_y;
@@ -75,10 +79,10 @@ struct flow_position_control_param_handles {
 	param_t limit_thrust_upper;
 	param_t limit_thrust_lower;
 	param_t limit_yaw_step;
-	param_t manual_xy_min_abs;
-	param_t manual_xy_max_abs;
-	param_t manual_yaw_min_abs;
-	param_t manual_yaw_max_abs;
+	param_t manual_threshold;
+	param_t rc_scale_pitch;
+	param_t rc_scale_roll;
+	param_t rc_scale_yaw;
 };
 
 /**
