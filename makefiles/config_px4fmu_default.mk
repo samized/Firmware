@@ -64,7 +64,6 @@ MODULES		+= modules/gpio_led
 #
 MODULES		+= modules/attitude_estimator_ekf
 MODULES		+= modules/attitude_estimator_so3_comp
-#MODULES		+= modules/position_estimator_mc
 MODULES		+= modules/position_estimator
 #MODULES		+= modules/position_estimator_flow
 MODULES		+= modules/att_pos_estimator_ekf
@@ -87,7 +86,6 @@ MODULES		+= modules/flow_speed_control
 #
 # Logging
 #
-MODULES		+= modules/sdlog
 MODULES		+= modules/sdlog2
 
 #
