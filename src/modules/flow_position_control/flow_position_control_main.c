@@ -449,6 +449,13 @@ flow_position_control_thread_main(int argc, char *argv[])
 
 									thrust_control = params.thrust_feedforward + thrust_diff + integrated_thrust_addition;
 
+									/* add attitude component
+									 * F = Fz / (cos(pitch)*cos(roll)) -> can be found in rotM
+									 */
+//									// FIXME
+//									if (att.R_valid && att.R[2][2] > 0)
+//										thrust_control = thrust_control / att.R[2][2];
+
 									/* set thrust lower limit */
 									if(thrust_control < params.limit_thrust_lower)
 										thrust_control = params.limit_thrust_lower;

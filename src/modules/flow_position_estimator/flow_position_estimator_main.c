@@ -152,8 +152,8 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 	static float global_speed[3] = {0.0f, 0.0f, 0.0f};
 	static uint32_t counter = 0;
 	static uint64_t time_last_flow = 0; // in ms
-	static float dt = 0; // seconds
-	static float sonar_last = 0;
+	static float dt = 0.0f; // seconds
+	static float sonar_last = 0.0f;
 	static bool sonar_valid = false;
 	static float sonar_lp = 0.0f;
 
@@ -266,7 +266,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					orb_copy(ORB_ID(vehicle_status), vehicle_status_sub, &vstatus);
 
 					/* vehicle state estimation */
-					float sonar = flow.ground_distance_m;
+					float sonar_new = flow.ground_distance_m;
 
 					/* set liftoff boolean
 					 * -> at bottom sonar sometimes does not work correctly, and has to be calibrated (distance higher than 0.3m)
@@ -275,12 +275,12 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					 */
 					if (!vehicle_liftoff)
 					{
-						if (vstatus.flag_system_armed && att_sp.thrust > params.minimum_liftoff_thrust && sonar > 0.3f && sonar < 1.0f)
+						if (vstatus.flag_system_armed && att_sp.thrust > params.minimum_liftoff_thrust && sonar_new > 0.3f && sonar_new < 1.0f)
 							vehicle_liftoff = true;
 					}
 					else
 					{
-						if (!vstatus.flag_system_armed || (att_sp.thrust < params.minimum_liftoff_thrust && sonar <= 0.3f))
+						if (!vstatus.flag_system_armed || (att_sp.thrust < params.minimum_liftoff_thrust && sonar_new <= 0.3f))
 							vehicle_liftoff = false;
 					}
 
@@ -347,29 +347,28 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					}
 
 					/* filtering ground distance */
-					if (!vehicle_liftoff || sonar > 2.0f)
-						sonar_valid = false;
-					else
-						sonar_valid = true;
-
 					if (!vehicle_liftoff || !vstatus.flag_system_armed)
 					{
 						/* not possible to fly */
 						sonar_valid = false;
 						local_pos.z = 0.0f;
 					}
+					else
+					{
+						sonar_valid = true;
+					}
 
-					if (sonar_valid)
+					if (sonar_valid || params.debug)
 					{
 						/* simple lowpass sonar filtering */
 						/* if new value or with sonar update frequency */
-						if (sonar != sonar_last || counter % 10 == 0)
+						if (sonar_new != sonar_last || counter % 10 == 0)
 						{
-							sonar_lp = 0.05f * sonar + 0.95f * sonar_lp;
-							sonar_last = sonar;
+							sonar_lp = 0.05f * sonar_new + 0.95f * sonar_lp;
+							sonar_last = sonar_new;
 						}
 
-						float height_diff = sonar - sonar_lp;
+						float height_diff = sonar_new - sonar_lp;
 
 						/* if over 1/2m spike follow lowpass */
 						if (height_diff < -params.sonar_lower_lp_threshold || height_diff > params.sonar_upper_lp_threshold)
@@ -378,7 +377,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 						}
 						else
 						{
-							local_pos.z = -sonar;
+							local_pos.z = -sonar_new;
 						}
 					}
 
