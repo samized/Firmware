@@ -155,6 +155,7 @@ flow_position_control_thread_main(int argc, char *argv[])
 	printf("[flow position control] starting\n");
 
 	uint32_t counter = 0;
+	const float time_scale = powf(10.0f,-6.0f);
 
 	/* structures */
 	struct vehicle_status_s vstatus;
@@ -190,7 +191,7 @@ flow_position_control_thread_main(int argc, char *argv[])
 	float yaw_sp = 0.0f;
 
 	/* init height setpoint */
-	float height_sp = params.height_flight_min;
+	float height_sp = params.height_min;
 
 	/* height controller states */
 	bool start_phase = true;
@@ -202,6 +203,9 @@ flow_position_control_thread_main(int argc, char *argv[])
 	float last_local_pos_z = 0.0f;
 	bool update_flow_sp_sumx = false;
 	bool update_flow_sp_sumy = false;
+	uint64_t last_time = 0.0f;
+	float dt = 0.0f; // s
+
 
 	/* register the perf counter */
 	perf_counter_t mc_loop_perf = perf_alloc(PC_ELAPSED, "flow_position_control_runtime");
@@ -269,6 +273,15 @@ flow_position_control_thread_main(int argc, char *argv[])
 						float manual_pitch = manual.pitch / params.rc_scale_pitch; // 0 to 1
 						float manual_roll = manual.roll / params.rc_scale_roll; // 0 to 1
 						float manual_yaw = manual.yaw / params.rc_scale_yaw; // -1 to 1
+
+						/* calc dt */
+						if(last_time == 0)
+						{
+							last_time = hrt_absolute_time();
+							continue;
+						}
+						dt = ((float) (hrt_absolute_time() - last_time)) * time_scale;
+						last_time = hrt_absolute_time();
 
 						/* update flow sum setpoint */
 						if (update_flow_sp_sumx)
@@ -394,10 +407,10 @@ flow_position_control_thread_main(int argc, char *argv[])
 									}
 
 									/* set current height as setpoint to avoid steps */
-									if (-local_pos.z > params.height_flight_min)
+									if (-local_pos.z > params.height_min)
 										height_sp = -local_pos.z;
 									else
-										height_sp = params.height_flight_min;
+										height_sp = params.height_min;
 
 									/* lower 20% stick range controls thrust down */
 									thrust_control = manual.throttle / 0.2f * landing_thrust_start;
@@ -410,32 +423,40 @@ flow_position_control_thread_main(int argc, char *argv[])
 										/* switch to start phase */
 										start_phase = true;
 										/* reset height setpoint */
-										height_sp = params.height_flight_min;
+										height_sp = params.height_min;
 									}
 								}
 								else
 								{
 									/* stabilized mode */
-
 									landing_initialized = false;
+
+									/* calc new thrust with PID */
+									float height_error = (local_pos.z - (-height_sp));
 
 									/* update height setpoint if needed*/
 									if (manual.throttle < 0.4f)
 									{
 										/* down */
-										if (height_sp > params.height_flight_min + params.height_step)
-											height_sp -= params.height_step;
+										if (height_sp > params.height_min + params.height_rate &&
+												fabsf(height_error) < params.limit_height_error)
+											height_sp -= params.height_rate * dt;
 									}
 
 									if (manual.throttle > 0.6f)
 									{
 										/* up */
-										if (height_sp < params.height_flight_max)
-											height_sp += params.height_step;
+										if (height_sp < params.height_max &&
+												fabsf(height_error) < params.limit_height_error)
+											height_sp += params.height_rate * dt;
 									}
 
-									/* calc new thrust with PID */
-									float height_error = (local_pos.z - (-height_sp));
+									/* instead of speed limitation, limit height error (downwards) */
+									if(height_error > params.limit_height_error)
+										height_error = params.limit_height_error;
+									else if(height_error < -params.limit_height_error)
+										height_error = -params.limit_height_error;
+
 									integrated_h_error = integrated_h_error + height_error;
 									float integrated_thrust_addition = integrated_h_error * params.height_i;
 
@@ -452,7 +473,7 @@ flow_position_control_thread_main(int argc, char *argv[])
 									/* add attitude component
 									 * F = Fz / (cos(pitch)*cos(roll)) -> can be found in rotM
 									 */
-//									// FIXME
+//									// TODO problem with attitude
 //									if (att.R_valid && att.R[2][2] > 0)
 //										thrust_control = thrust_control / att.R[2][2];
 

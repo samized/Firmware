@@ -146,7 +146,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 	static const int8_t rotM_flow_sensor[3][3] =   {{  0, 1, 0 },
 													{ -1, 0, 0 },
 													{  0, 0, 1 }}; // 90deg rotated
-	const float time_scale = pow(10,-6);
+	const float time_scale = powf(10.0f,-6.0f);
 	static float speed[3] = {0.0f, 0.0f, 0.0f};
 	static float flow_speed[3] = {0.0f, 0.0f, 0.0f};
 	static float global_speed[3] = {0.0f, 0.0f, 0.0f};
