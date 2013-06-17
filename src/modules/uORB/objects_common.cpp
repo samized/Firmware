@@ -101,11 +101,11 @@ ORB_DEFINE(vehicle_command, struct vehicle_command_s);
 #include "topics/vehicle_local_position_setpoint.h"
 ORB_DEFINE(vehicle_local_position_setpoint, struct vehicle_local_position_setpoint_s);
 
-#include "topics/vehicle_bodyframe_position_setpoint.h"
-ORB_DEFINE(vehicle_bodyframe_position_setpoint, struct vehicle_bodyframe_position_setpoint_s);
-
 #include "topics/vehicle_bodyframe_speed_setpoint.h"
 ORB_DEFINE(vehicle_bodyframe_speed_setpoint, struct vehicle_bodyframe_speed_setpoint_s);
+
+#include "topics/vehicle_bodyframe_position_setpoint.h"
+ORB_DEFINE(vehicle_bodyframe_position_setpoint, struct vehicle_bodyframe_position_setpoint_s);
 
 #include "topics/vehicle_global_waypoint.h"
 ORB_DEFINE(vehicle_global_waypoint, struct vehicle_global_waypoint_s);
