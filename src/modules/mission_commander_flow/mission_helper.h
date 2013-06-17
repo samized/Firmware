@@ -14,7 +14,7 @@
 #include <uORB/topics/omnidirectional_flow.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
-#include <uORB/topics/vehicle_bodyframe_position.h>
+#include <uORB/topics/filtered_bottom_flow.h>
 #include <uORB/topics/vehicle_bodyframe_position_setpoint.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include "mission_commander_flow_params.h"
@@ -66,21 +66,28 @@ struct mission_state_s {
 	int debug_value4;
 };
 
+/**
+ * Navigation helpfunctions.
+ */
 void convert_setpoint_bodyframe2local(
 		struct vehicle_local_position_s *local_pos,
-		struct vehicle_bodyframe_position_s *bodyframe_pos,
+		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp,
 		struct vehicle_local_position_setpoint_s *local_pos_sp
 		);
 void convert_setpoint_local2bodyframe(
 		struct vehicle_local_position_s *local_pos,
-		struct vehicle_bodyframe_position_s *bodyframe_pos,
+		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_local_position_setpoint_s *local_pos_sp,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp
 		);
-float get_yaw(struct vehicle_local_position_s *local_pos, struct vehicle_local_position_setpoint_s *local_pos_sp);
+float get_yaw(
+		struct vehicle_local_position_s *local_pos,
+		struct vehicle_local_position_setpoint_s *local_pos_sp
+		);
+
 void init_state(struct mission_state_s *state);
 void do_state_update(struct mission_state_s *current_state, int mavlink_fd, mission_state_t new_state);
 void do_radar_update(struct mission_state_s *current_state, struct mission_commander_flow_params *params,

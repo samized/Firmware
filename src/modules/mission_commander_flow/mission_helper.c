@@ -15,14 +15,14 @@
  */
 void convert_setpoint_bodyframe2local(
 		struct vehicle_local_position_s *local_pos,
-		struct vehicle_bodyframe_position_s *bodyframe_pos,
+		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp,
 		struct vehicle_local_position_setpoint_s *local_pos_sp
 		);
 void convert_setpoint_local2bodyframe(
 		struct vehicle_local_position_s *local_pos,
-		struct vehicle_bodyframe_position_s *bodyframe_pos,
+		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_local_position_setpoint_s *local_pos_sp,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp
@@ -35,7 +35,7 @@ float get_yaw(
 
 void convert_setpoint_bodyframe2local(
 		struct vehicle_local_position_s *local_pos,
-		struct vehicle_bodyframe_position_s *bodyframe_pos,
+		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp,
 		struct vehicle_local_position_setpoint_s *local_pos_sp
@@ -44,8 +44,8 @@ void convert_setpoint_bodyframe2local(
 	static float wp_bodyframe_offset[3] = {0.0f, 0.0f, 0.0f};
 	static float wp_local_offset[3] = {0.0f, 0.0f, 0.0f};
 
-	wp_bodyframe_offset[0] = bodyframe_pos_sp->x - bodyframe_pos->x;
-	wp_bodyframe_offset[1] = bodyframe_pos_sp->y - bodyframe_pos->y;
+	wp_bodyframe_offset[0] = bodyframe_pos_sp->x - filtered_flow->sumx;
+	wp_bodyframe_offset[1] = bodyframe_pos_sp->y - filtered_flow->sumy;
 	wp_bodyframe_offset[2] = 0; // no influence of z...
 
 	/* calc current waypoint cooridnates in local */
@@ -65,7 +65,7 @@ void convert_setpoint_bodyframe2local(
 
 void convert_setpoint_local2bodyframe(
 		struct vehicle_local_position_s *local_pos,
-		struct vehicle_bodyframe_position_s *bodyframe_pos,
+		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_local_position_setpoint_s *local_pos_sp,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp
@@ -87,8 +87,8 @@ void convert_setpoint_local2bodyframe(
 		wp_bodyframe_offset[i] = sum;
 	}
 
-	bodyframe_pos_sp->x = bodyframe_pos->x + wp_bodyframe_offset[0];
-	bodyframe_pos_sp->y = bodyframe_pos->y + wp_bodyframe_offset[1];
+	bodyframe_pos_sp->x = filtered_flow->sumx + wp_bodyframe_offset[0];
+	bodyframe_pos_sp->y = filtered_flow->sumy + wp_bodyframe_offset[1];
 	bodyframe_pos_sp->z = local_pos_sp->z; // let z as it is...
 	bodyframe_pos_sp->yaw = local_pos_sp->yaw;
 

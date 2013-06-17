@@ -61,10 +61,7 @@ PARAM_DEFINE_INT32(RF_DEBUG, 0);
 
 int parameters_init(struct radar_flow_param_handles *h)
 {
-	h->pos_sp_x	 			=	param_find("RF_POS_SP_X");
-	h->pos_sp_y				=	param_find("RF_POS_SP_Y");
 	h->beep_front_sonar		=	param_find("RF_BEEP_F");
-	h->beep_bottom_sonar	=	param_find("RF_BEEP_B");
 	h->kalman_k1	 		=	param_find("RF_KAL_K1");
 	h->kalman_k2			=	param_find("RF_KAL_K2");
 	h->front_lp_alpha		=	param_find("RF_FRONT_A");
@@ -85,10 +82,7 @@ int parameters_init(struct radar_flow_param_handles *h)
 
 int parameters_update(const struct radar_flow_param_handles *h, struct radar_flow_params *p)
 {
-	param_get(h->pos_sp_x, &(p->pos_sp_x));
-	param_get(h->pos_sp_y, &(p->pos_sp_y));
 	param_get(h->beep_front_sonar, &(p->beep_front_sonar));
-	param_get(h->beep_bottom_sonar, &(p->beep_bottom_sonar));
 	param_get(h->kalman_k1, &(p->kalman_k1));
 	param_get(h->kalman_k2, &(p->kalman_k2));
 	param_get(h->front_lp_alpha, &(p->front_lp_alpha));

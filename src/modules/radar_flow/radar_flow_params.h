@@ -41,9 +41,6 @@
 #include <systemlib/param/param.h>
 
 struct radar_flow_params {
-	float pos_sp_x;
-	float pos_sp_y;
-	int beep_bottom_sonar;
 	int beep_front_sonar;
 	float kalman_k1;
 	float kalman_k2;
@@ -62,9 +59,6 @@ struct radar_flow_params {
 };
 
 struct radar_flow_param_handles {
-	param_t pos_sp_x;
-	param_t pos_sp_y;
-	param_t beep_bottom_sonar;
 	param_t beep_front_sonar;
 	param_t kalman_k1;
 	param_t kalman_k2;

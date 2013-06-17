@@ -63,7 +63,7 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_waypoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
-#include <uORB/topics/vehicle_bodyframe_position.h>
+#include <uORB/topics/filtered_bottom_flow.h>
 #include <uORB/topics/vehicle_bodyframe_position_setpoint.h>
 #include <uORB/topics/optical_flow.h>
 #include <uORB/topics/omnidirectional_flow.h>
@@ -166,8 +166,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	memset(&omni_flow, 0, sizeof(omni_flow));
 	struct vehicle_local_position_s local_pos;
 	memset(&local_pos, 0, sizeof(local_pos));
-	struct vehicle_bodyframe_position_s bodyframe_pos;
-	memset(&bodyframe_pos, 0, sizeof(bodyframe_pos));
+	struct filtered_bottom_flow_s filtered_flow;
+	memset(&filtered_flow, 0, sizeof(filtered_flow));
 	struct discrete_radar_s discrete_radar;
 	memset(&discrete_radar, 0, sizeof(discrete_radar));
 
@@ -190,7 +190,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	int manual_control_setpoint_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
 	int omnidirectional_flow_sub = orb_subscribe(ORB_ID(omnidirectional_flow));
 	int vehicle_local_position_sub = orb_subscribe(ORB_ID(vehicle_local_position));
-	int vehicle_bodyframe_position_sub = orb_subscribe(ORB_ID(vehicle_bodyframe_position));
+	int filtered_bottom_flow_sub = orb_subscribe(ORB_ID(filtered_bottom_flow));
 	int discrete_radar_sub = orb_subscribe(ORB_ID(discrete_radar));
 	int vehicle_local_waypoint_sub = orb_subscribe(ORB_ID(vehicle_local_waypoint));
 
@@ -304,8 +304,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 									do_state_update(&mission_state, mavlink_fd, MISSION_ABORTED);
 									/* set position setpoint to current position*/
 									/* TODO do we need that? */
-									bodyframe_pos_sp.x = bodyframe_pos.x;
-									bodyframe_pos_sp.y = bodyframe_pos.y;
+									bodyframe_pos_sp.x = filtered_flow.sumx;
+									bodyframe_pos_sp.y = filtered_flow.sumy;
 									bodyframe_pos_sp.yaw = att.yaw;
 
 								} else {
@@ -356,8 +356,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
 					/* get a local copy of local position */
 					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
-					/* get a local copy of bodyframe position */
-					orb_copy(ORB_ID(vehicle_bodyframe_position), vehicle_bodyframe_position_sub, &bodyframe_pos);
+					/* get a local copy of filtered bottom flow */
+					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 
 					if (mission_state.state == MISSION_STARTED || params.debug) {
 						/* test if enough space */
@@ -365,13 +365,13 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 							/* update sonar obstacle if valid */
 							if (mission_state.sonar_obstacle.valid) {
-								convert_setpoint_local2bodyframe(&local_pos, &bodyframe_pos, &att,
+								convert_setpoint_local2bodyframe(&local_pos, &filtered_flow, &att,
 										&mission_state.sonar_obstacle.sonar_obstacle_local,
 										&mission_state.sonar_obstacle.sonar_obstacle_bodyframe);
 
 								/* convert to polar */
-								float x_bodyframe_off = mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x - bodyframe_pos.x;
-								float y_bodyframe_off = mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y - bodyframe_pos.y;
+								float x_bodyframe_off = mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x - filtered_flow.sumx;
+								float y_bodyframe_off = mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y - filtered_flow.sumy;
 
 								if (x_bodyframe_off > 0.0f) {
 									mission_state.sonar_obstacle.sonar_obst_polar_r =
@@ -402,11 +402,11 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 							if(mission_state.sonar_obstacle.valid && mission_state.sonar_obstacle.updated) {
 								/* create new sonar obstacle and convert to local frame */
-								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x = bodyframe_pos.x +
+								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x = filtered_flow.sumx +
 										mission_state.sonar_obstacle.sonar_obst_polar_r;
-								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y = bodyframe_pos.y;
+								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y = filtered_flow.sumy;
 
-								convert_setpoint_bodyframe2local(&local_pos, &bodyframe_pos, &att,
+								convert_setpoint_bodyframe2local(&local_pos, &filtered_flow, &att,
 										&mission_state.sonar_obstacle.sonar_obstacle_bodyframe,
 										&mission_state.sonar_obstacle.sonar_obstacle_local);
 							}
@@ -433,7 +433,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					/* get a local copy of local position */
 					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
 					/* get a local copy of bodyframe position */
-					orb_copy(ORB_ID(vehicle_bodyframe_position), vehicle_bodyframe_position_sub, &bodyframe_pos);
+					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 					/* get a local copy of attitude */
 					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
 					/* get a local copy of the vehicle state */
@@ -447,7 +447,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 							/* do we have a destination ??? -> start mission */
 							final_dest_bodyframe.x = bodyframe_pos_sp.x + params.mission_x_offset;
 							final_dest_bodyframe.y = bodyframe_pos_sp.y + params.mission_y_offset;
-							convert_setpoint_bodyframe2local(&local_pos, &bodyframe_pos,&att,
+							convert_setpoint_bodyframe2local(&local_pos, &filtered_flow,&att,
 									&final_dest_bodyframe, &final_dest_local);
 							final_dest_bodyframe.yaw = get_yaw(&local_pos, &final_dest_local); // changeable later
 							do_state_update(&mission_state, mavlink_fd, MISSION_STARTED);
@@ -457,7 +457,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 							/* no yaw correction in final sequence -> no need for waypoint update */
 							if(!mission_state.final_sequence){
 								/* calc final destination in bodyframe */
-								convert_setpoint_local2bodyframe(&local_pos, &bodyframe_pos, &att,
+								convert_setpoint_local2bodyframe(&local_pos, &filtered_flow, &att,
 										&final_dest_local, &final_dest_bodyframe);
 							}
 
@@ -614,8 +614,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					} else
 					{
 						/* if back in auto or stabilized mode reset setpoint to current position */
-						bodyframe_pos_sp.x = bodyframe_pos.x;
-						bodyframe_pos_sp.y = bodyframe_pos.y;
+						bodyframe_pos_sp.x = filtered_flow.sumx;
+						bodyframe_pos_sp.y = filtered_flow.sumy;
 						bodyframe_pos_sp.yaw = att.yaw;
 					}
 
@@ -628,7 +628,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 						printf("[mission commander] invalid bodyframe position setpoint!!!\n");
 					}
 
-					convert_setpoint_bodyframe2local(&local_pos,&bodyframe_pos,&att,&bodyframe_pos_sp,&local_pos_sp);
+					convert_setpoint_bodyframe2local(&local_pos,&filtered_flow,&att,&bodyframe_pos_sp,&local_pos_sp);
 
 					if(isfinite(local_pos_sp.x) && isfinite(local_pos_sp.y) && isfinite(local_pos_sp.yaw))
 					{
@@ -698,7 +698,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	close(parameter_update_sub);
 	close(vehicle_attitude_sub);
 	close(vehicle_local_position_sub);
-	close(vehicle_bodyframe_position_sub);
+	close(filtered_bottom_flow_sub);
 	close(vehicle_status_sub);
 	close(manual_control_setpoint_sub);
 	close(omnidirectional_flow_sub);

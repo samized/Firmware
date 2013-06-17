@@ -67,7 +67,7 @@ MODULES		+= modules/attitude_estimator_so3_comp
 MODULES		+= modules/position_estimator
 MODULES		+= modules/att_pos_estimator_ekf
 MODULES		+= examples/flow_position_estimator
-#MODULES		+= modules/radar_flow
+MODULES		+= modules/radar_flow
 
 #
 # Vehicle Control
@@ -79,7 +79,7 @@ MODULES		+= modules/multirotor_att_control
 MODULES		+= modules/multirotor_pos_control
 MODULES		+= examples/flow_position_control
 MODULES		+= examples/flow_speed_control
-#MODULES		+= modules/mission_commander_flow
+MODULES		+= modules/mission_commander_flow
 
 #
 # Logging

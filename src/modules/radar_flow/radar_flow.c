@@ -50,7 +50,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/vehicle_bodyframe_position.h>
+#include <uORB/topics/filtered_bottom_flow.h>
 #include <uORB/topics/omnidirectional_flow.h>
 #include <uORB/topics/discrete_radar.h>
 
@@ -151,8 +151,8 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 	memset(&att, 0, sizeof(att));
 	struct omnidirectional_flow_s omni_flow;
 	memset(&omni_flow, 0, sizeof(omni_flow));
-	struct vehicle_bodyframe_position_s bodyframe_pos;
-	memset(&bodyframe_pos, 0, sizeof(bodyframe_pos));
+	struct filtered_bottom_flow_s filtered_flow;
+	memset(&filtered_flow, 0, sizeof(filtered_flow));
 
 	/* publishing parameters */
 	struct discrete_radar_s discrete_radar;
@@ -163,7 +163,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 	int vehicle_attitude_sub = orb_subscribe(ORB_ID(vehicle_attitude));
 	int vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	int omnidirectional_flow_sub = orb_subscribe(ORB_ID(omnidirectional_flow));
-	int vehicle_bodyframe_position_sub = orb_subscribe(ORB_ID(vehicle_bodyframe_position));
+	int filtered_bottom_flow_sub = orb_subscribe(ORB_ID(filtered_bottom_flow));
 
 	orb_advert_t discrete_radar_pub = orb_advertise(ORB_ID(discrete_radar), &discrete_radar);
 
@@ -182,8 +182,6 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 	printf("[radar] initialized\n");
 
-	int tone_frequence = 100;
-	int tone_counter = 0;
 	uint64_t time_last_flow = 0;
 
 	/* flow filter parameters */
@@ -293,7 +291,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					/* get a local copy of attitude */
 					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
 					/* get a local copy of bodyframe position */
-					orb_copy(ORB_ID(vehicle_bodyframe_position), vehicle_bodyframe_position_sub, &bodyframe_pos);
+					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 					/* get a local copy of omnidirectional flow */
 					orb_copy(ORB_ID(omnidirectional_flow), omnidirectional_flow_sub, &omni_flow);
 
@@ -330,8 +328,8 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					front_distance_filtered = (1 - params.front_lp_alpha) * front_distance_filtered + params.front_lp_alpha * omni_flow.front_distance_m;
 					float dt = ((float)(omni_flow.timestamp - time_last_flow)) / 1000000.0f; // seconds
 					time_last_flow = omni_flow.timestamp;
-					speed[0] = bodyframe_pos.vx;
-					speed[1] = bodyframe_pos.vy;
+					speed[0] = filtered_flow.vx;
+					speed[1] = filtered_flow.vy;
 					frontFlowKalmanFilter(dt, params.kalman_k1, params.kalman_k2, flow_aposteriori_k, speed_aposteriori_k, omni_flow.left, omni_flow.right, speed, 1, flow_aposteriori, speed_aposteriori);
 					memcpy(flow_aposteriori_k, flow_aposteriori, sizeof(flow_aposteriori));
 					memcpy(speed_aposteriori_k, speed_aposteriori, sizeof(speed_aposteriori));
@@ -377,16 +375,16 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					speed_filtered[1] = speed_aposteriori[2];
 
 					if (update_initialized) {
-						position_update[0] = bodyframe_pos.x - position_last[0];
-						position_update[1] = bodyframe_pos.y - position_last[1];
+						position_update[0] = filtered_flow.sumx - position_last[0];
+						position_update[1] = filtered_flow.sumy - position_last[1];
 						yaw_update = att.yaw - yaw_last;
 					} else {
 						/* at first round */
 						update_initialized = true;
 					}
 
-					position_last[0] = bodyframe_pos.x;
-					position_last[1] = bodyframe_pos.y;
+					position_last[0] = filtered_flow.sumx;
+					position_last[1] = filtered_flow.sumy;
 					yaw_last = att.yaw;
 
 					wallEstimationFilter(radar_filtered_k, radar_weights_k, omni_left_filtered, omni_right_filtered,
@@ -454,18 +452,6 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					discrete_radar.timestamp = hrt_absolute_time();
 					orb_publish(ORB_ID(discrete_radar), discrete_radar_pub, &discrete_radar);
 
-//					if(params.pos_sp_x)
-//					{
-//						if (!played)
-//						{
-//							tune_tetris();
-//							played = true;
-//							printf("tetris tuned...\n");
-//						}
-//					} else {
-//						played = false;
-//					}
-
 					/* reset parameters */
 					position_update[0] = 0.0f;
 					position_update[1] = 0.0f;
@@ -479,17 +465,6 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 			}
 
-			tone_frequence =  (int)(-bodyframe_pos.z * 100);
-			if(tone_counter > tone_frequence)
-			{
-				if (params.beep_bottom_sonar)
-				{
-					tune_sonar();
-				}
-				tone_counter = 0;
-			}
-
-			tone_counter++;
 			counter++;
 
 
@@ -528,7 +503,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 	close(parameter_update_sub);
 	close(vehicle_attitude_sub);
-	close(vehicle_bodyframe_position_sub);
+	close(filtered_bottom_flow_sub);
 	close(vehicle_status_sub);
 	close(omnidirectional_flow_sub);
 
