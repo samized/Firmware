@@ -10,29 +10,6 @@
 #include "codegen/radarControl.h"
 #include <mavlink/mavlink_log.h>
 
-/**
- * Navigation helpfunctions.
- */
-void convert_setpoint_bodyframe2local(
-		struct vehicle_local_position_s *local_pos,
-		struct filtered_bottom_flow_s *filtered_flow,
-		struct vehicle_attitude_s *att,
-		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp,
-		struct vehicle_local_position_setpoint_s *local_pos_sp
-		);
-void convert_setpoint_local2bodyframe(
-		struct vehicle_local_position_s *local_pos,
-		struct filtered_bottom_flow_s *filtered_flow,
-		struct vehicle_attitude_s *att,
-		struct vehicle_local_position_setpoint_s *local_pos_sp,
-		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp
-		);
-
-float get_yaw(
-		struct vehicle_local_position_s *local_pos,
-		struct vehicle_local_position_setpoint_s *local_pos_sp
-		);
-
 void convert_setpoint_bodyframe2local(
 		struct vehicle_local_position_s *local_pos,
 		struct filtered_bottom_flow_s *filtered_flow,
