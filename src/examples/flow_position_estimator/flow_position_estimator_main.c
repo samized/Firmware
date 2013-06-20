@@ -143,9 +143,12 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 	printf("[flow position estimator] starting\n");
 
 	/* rotation matrix for transformation of optical flow speed vectors */
-	static const int8_t rotM_flow_sensor[3][3] =   {{  0, 1, 0 },
-													{ -1, 0, 0 },
-													{  0, 0, 1 }}; // 90deg rotated
+	static const float rotM_flow_sensor[3][3] =   {	{  0.0f,	1.0f, 	0.0f	},
+													{ -1.0f, 	0.0f,	0.0f	},
+													{  0.0f,	0.0f,	1.0f 	}}; // 90deg rotated
+	static float rotM_z[3][3] =					  { {  1.0f,	0.0f,	0.0f	},
+													{  0.0f, 	1.0f,	0.0f	},
+													{  0.0f,	0.0f,	1.0f 	}};
 	const float time_scale = powf(10.0f,-6.0f);
 	static float speed[3] = {0.0f, 0.0f, 0.0f};
 	static float flow_speed[3] = {0.0f, 0.0f, 0.0f};
@@ -320,17 +323,33 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 
 						// TODO add yaw rotation correction (with distance to vehicle zero)
 
-						/* convert to globalframe velocity
+						/* convert to localframe velocity
 						 * -> local position is currently not used for position control
 						 */
-						for(uint8_t i = 0; i < 3; i++)
+						float cos_yaw = cosf(att.yaw);
+						float sin_yaw = sinf(att.yaw);
+						rotM_z[0][0] = cos_yaw;
+						rotM_z[0][1] = -sin_yaw;
+						rotM_z[1][0] = sin_yaw;
+						rotM_z[1][1] = cos_yaw;
+
+						for(uint8_t i = 0; i < 2; i++)
 						{
 							float sum = 0.0f;
-							for(uint8_t j = 0; j < 3; j++)
-								sum = sum + speed[j] * att.R[i][j];
+							for(uint8_t j = 0; j < 2; j++)
+								sum = sum + speed[j] * rotM_z[i][j];
 
 							global_speed[i] = sum;
 						}
+
+//						for(uint8_t i = 0; i < 3; i++)
+//						{
+//							float sum = 0.0f;
+//							for(uint8_t j = 0; j < 3; j++)
+//								sum = sum + speed[j] * att.R[i][j];
+//
+//							global_speed[i] = sum;
+//						}
 
 						local_pos.x = local_pos.x + global_speed[0] * dt;
 						local_pos.y = local_pos.y + global_speed[1] * dt;
