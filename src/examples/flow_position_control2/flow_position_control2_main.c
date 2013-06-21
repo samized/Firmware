@@ -164,6 +164,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	struct filtered_bottom_flow_s filtered_flow;
 	struct vehicle_local_position_s local_pos;
 
+	struct vehicle_local_position_setpoint_s local_pos_sp;
 	struct vehicle_bodyframe_speed_setpoint_s speed_sp;
 
 	/* subscribe to attitude, motor setpoints and system state */
@@ -176,6 +177,8 @@ flow_position_control2_thread_main(int argc, char *argv[])
 
 	orb_advert_t speed_sp_pub;
 	bool speed_setpoint_adverted = false;
+	orb_advert_t local_pos_sp_pub;
+	bool local_position_setpoint_adverted = false;
 
 	/* parameters init*/
 	struct flow_position_control2_params params;
@@ -183,9 +186,13 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	parameters_init(&param_handles);
 	parameters_update(&param_handles, &params);
 
-	/* init flow sum setpoint */
+	/* init setpoint */
 	float flow_sp_sumx = 0.0f;
 	float flow_sp_sumy = 0.0f;
+	local_pos_sp.x = 0.0f;
+	local_pos_sp.y = 0.0f;
+	local_pos_sp.z = 0.0f;
+	local_pos_sp.yaw = 0.0f;
 
 	/* init yaw setpoint */
 	float yaw_sp = 0.0f;
@@ -201,8 +208,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	/* states */
 	float integrated_h_error = 0.0f;
 	float last_local_pos_z = 0.0f;
-	bool update_flow_sp_sumx = false;
-	bool update_flow_sp_sumy = false;
+	bool update_position_sp = false;
 	uint64_t last_time = 0.0f;
 	float dt = 0.0f; // s
 
@@ -284,15 +290,13 @@ flow_position_control2_thread_main(int argc, char *argv[])
 						last_time = hrt_absolute_time();
 
 						/* update flow sum setpoint */
-						if (update_flow_sp_sumx)
+						if (update_position_sp)
 						{
 							flow_sp_sumx = filtered_flow.sumx;
-							update_flow_sp_sumx = false;
-						}
-						if (update_flow_sp_sumy)
-						{
 							flow_sp_sumy = filtered_flow.sumy;
-							update_flow_sp_sumy = false;
+							local_pos_sp.x = local_pos.x;
+							local_pos_sp.y = local_pos.y;
+							update_position_sp = false;
 						}
 
 						/* calc new bodyframe speed setpoints */
@@ -306,13 +310,13 @@ flow_position_control2_thread_main(int argc, char *argv[])
 							if(fabsf(manual_pitch) > params.manual_threshold)
 							{
 								speed_body_x = -manual_pitch * params.limit_speed_x * speed_limit_height_factor;
-								update_flow_sp_sumx = true;
+								update_position_sp = true;
 							}
 
 							if(fabsf(manual_roll) > params.manual_threshold)
 							{
 								speed_body_y = manual_roll * params.limit_speed_y * speed_limit_height_factor;
-								update_flow_sp_sumy = true;
+								update_position_sp = true;
 							}
 						}
 
@@ -360,6 +364,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 
 						/* forward yaw setpoint */
 						speed_sp.yaw_sp = yaw_sp;
+						local_pos_sp.yaw = yaw_sp;
 
 
 						/* manual height control
@@ -505,6 +510,25 @@ flow_position_control2_thread_main(int argc, char *argv[])
 							{
 								speed_sp_pub = orb_advertise(ORB_ID(vehicle_bodyframe_speed_setpoint), &speed_sp);
 								speed_setpoint_adverted = true;
+							}
+						}
+						else
+						{
+							warnx("NaN in flow position controller!");
+						}
+
+						/* publish new position setpoint */
+						if(isfinite(local_pos_sp.x) && isfinite(local_pos_sp.y) && isfinite(local_pos_sp.z) && isfinite(local_pos_sp.yaw))
+						{
+
+							if(local_position_setpoint_adverted)
+							{
+								orb_publish(ORB_ID(vehicle_local_position_setpoint), local_pos_sp_pub, &local_pos_sp);
+							}
+							else
+							{
+								local_pos_sp_pub = orb_advertise(ORB_ID(vehicle_local_position_setpoint), &local_pos_sp);
+								local_position_setpoint_adverted = true;
 							}
 						}
 						else
