@@ -149,7 +149,6 @@ int mission_commander_flow_main(int argc, char *argv[])
 
 int mission_commander_flow_thread_main(int argc, char *argv[])
 {
-
 	/* welcome user */
 	thread_running = true;
 	printf("[mission commander] starting\n");
@@ -166,8 +165,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	memset(&omni_flow, 0, sizeof(omni_flow));
 	struct vehicle_local_position_s local_pos;
 	memset(&local_pos, 0, sizeof(local_pos));
-	struct filtered_bottom_flow_s filtered_flow;
-	memset(&filtered_flow, 0, sizeof(filtered_flow));
 	struct discrete_radar_s discrete_radar;
 	memset(&discrete_radar, 0, sizeof(discrete_radar));
 
@@ -182,6 +179,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	memset(&local_pos_sp, 0, sizeof(local_pos_sp));
 	struct vehicle_bodyframe_position_setpoint_s bodyframe_pos_sp;
 	memset(&bodyframe_pos_sp, 0, sizeof(bodyframe_pos_sp));
+	struct vehicle_local_position_setpoint_s local_pos_sp_step;
+	memset(&local_pos_sp_step, 0, sizeof(local_pos_sp_step));
 
 	/* subscribe to attitude, motor setpoints and system state */
 	int parameter_update_sub = orb_subscribe(ORB_ID(parameter_update));
@@ -190,14 +189,19 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	int manual_control_setpoint_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
 	int omnidirectional_flow_sub = orb_subscribe(ORB_ID(omnidirectional_flow));
 	int vehicle_local_position_sub = orb_subscribe(ORB_ID(vehicle_local_position));
-	int filtered_bottom_flow_sub = orb_subscribe(ORB_ID(filtered_bottom_flow));
 	int discrete_radar_sub = orb_subscribe(ORB_ID(discrete_radar));
 	int vehicle_local_waypoint_sub = orb_subscribe(ORB_ID(vehicle_local_waypoint));
 
-	/* advert local/bodyframe position setpoint */
-	/* TODO fix advert bug */
-	orb_advert_t vehicle_local_position_sp_pub = orb_advertise(ORB_ID(vehicle_local_position_setpoint), &local_pos_sp);
-	orb_advert_t vehicle_bodyframe_position_sp_pub = orb_advertise(ORB_ID(vehicle_bodyframe_position_setpoint), &bodyframe_pos_sp);
+	/* advert local position setpoint */
+	orb_advert_t vehicle_local_position_sp_pub;
+	bool local_position_setpoint_adverted = false;
+	bool local_position_setpoint_changed = true;
+
+	/* init setpoint */
+	local_pos_sp.x = 0.0f;
+	local_pos_sp.y = 0.0f;
+	local_pos_sp.z = 0.0f;
+	local_pos_sp.yaw = 0.0f;
 
 	/* for debugging */
 //	struct vehicle_global_position_s debug_pos;
@@ -281,6 +285,10 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 				/* new mission commands -> later from qgroundcontroll */
 				if (fds[3].revents & POLLIN){
 					/* NEW MANUAL CONTROLS------------------------------------------------------*/
+					/* get a local copy of attitude */
+					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
+					/* get a local copy of local position */
+					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
 					/* get a local copy of manual setpoint */
 					orb_copy(ORB_ID(manual_control_setpoint), manual_control_setpoint_sub, &manual);
 					/* get a local copy of the vehicle state */
@@ -304,9 +312,10 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 									do_state_update(&mission_state, mavlink_fd, MISSION_ABORTED);
 									/* set position setpoint to current position*/
 									/* TODO do we need that? */
-									bodyframe_pos_sp.x = filtered_flow.sumx;
-									bodyframe_pos_sp.y = filtered_flow.sumy;
-									bodyframe_pos_sp.yaw = att.yaw;
+									local_pos_sp.x = local_pos.x;
+									local_pos_sp.y = local_pos.y;
+									local_pos_sp.yaw = att.yaw;
+									local_position_setpoint_changed = true;
 
 								} else {
 									/* reset mission */
@@ -316,6 +325,39 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 							}
 						}
 
+						/* reset setpoint if we have manual controlling input */
+						if(isfinite(manual.yaw) && isfinite(manual.throttle) && isfinite(manual.pitch) && isfinite(manual.roll))
+						{
+							float manual_pitch = manual.pitch / params.rc_scale_pitch; // 0 to 1
+							float manual_roll = manual.roll / params.rc_scale_roll; // 0 to 1
+							float manual_yaw = manual.yaw / params.rc_scale_yaw; // -1 to 1
+
+							if(manual.throttle > 0.2f)
+							{
+								if(		fabsf(manual_pitch) > params.manual_threshold ||
+										fabsf(manual_roll) > params.manual_threshold)
+								{
+									/* manual speed control active -> update position */
+									local_pos_sp.x = local_pos.x;
+									local_pos_sp.y = local_pos.y;
+									local_position_setpoint_changed = true;
+								}
+
+								if(fabsf(manual_yaw) > params.manual_threshold)
+								{
+									/* manual yaw control -> update position */
+									local_pos_sp.yaw += manual_yaw * params.mission_update_step_yaw * 10.0f;
+									bodyframe_pos_sp.yaw = local_pos_sp.yaw;
+									local_position_setpoint_changed = true;
+
+									/* modulo for rotation -pi +pi */
+									if(local_pos_sp.yaw < -M_PI_F)
+										local_pos_sp.yaw = local_pos_sp.yaw + M_TWOPI_F;
+									else if(local_pos_sp.yaw > M_PI_F)
+										local_pos_sp.yaw = local_pos_sp.yaw - M_TWOPI_F;
+								}
+							}
+						}
 					} else {
 
 						if (mission_state.state != MISSION_RESETED) {
@@ -356,8 +398,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
 					/* get a local copy of local position */
 					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
-					/* get a local copy of filtered bottom flow */
-					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 
 					if (mission_state.state == MISSION_STARTED || params.debug) {
 						/* test if enough space */
@@ -365,20 +405,21 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 							/* update sonar obstacle if valid */
 							if (mission_state.sonar_obstacle.valid) {
-								convert_setpoint_local2bodyframe(&local_pos, &filtered_flow, &att,
+								convert_setpoint_local2bodyframe(&local_pos, &att,
 										&mission_state.sonar_obstacle.sonar_obstacle_local,
 										&mission_state.sonar_obstacle.sonar_obstacle_bodyframe);
 
 								/* convert to polar */
-								float x_bodyframe_off = mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x - filtered_flow.sumx;
-								float y_bodyframe_off = mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y - filtered_flow.sumy;
-
-								if (x_bodyframe_off > 0.0f) {
+								if (mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x > 0.0f) {
 									mission_state.sonar_obstacle.sonar_obst_polar_r =
-											sqrtf(	x_bodyframe_off * x_bodyframe_off + y_bodyframe_off * y_bodyframe_off);
+											sqrtf(	mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x *
+													mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x +
+													mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y *
+													mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y);
 
 									mission_state.sonar_obstacle.sonar_obst_polar_alpha =
-											atan2f( y_bodyframe_off, x_bodyframe_off);
+											atan2f( mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y,
+													mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x);
 								} else {
 									mission_state.sonar_obstacle.valid = false;
 								}
@@ -402,11 +443,10 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 							if(mission_state.sonar_obstacle.valid && mission_state.sonar_obstacle.updated) {
 								/* create new sonar obstacle and convert to local frame */
-								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x = filtered_flow.sumx +
-										mission_state.sonar_obstacle.sonar_obst_polar_r;
-								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y = filtered_flow.sumy;
+								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.x = mission_state.sonar_obstacle.sonar_obst_polar_r;
+								mission_state.sonar_obstacle.sonar_obstacle_bodyframe.y = 0.0f;
 
-								convert_setpoint_bodyframe2local(&local_pos, &filtered_flow, &att,
+								convert_setpoint_bodyframe2local(&local_pos, &att,
 										&mission_state.sonar_obstacle.sonar_obstacle_bodyframe,
 										&mission_state.sonar_obstacle.sonar_obstacle_local);
 							}
@@ -432,8 +472,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					orb_copy(ORB_ID(manual_control_setpoint), manual_control_setpoint_sub, &manual);
 					/* get a local copy of local position */
 					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
-					/* get a local copy of bodyframe position */
-					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 					/* get a local copy of attitude */
 					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
 					/* get a local copy of the vehicle state */
@@ -445,10 +483,9 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 						if (mission_state.state == MISSION_READY) {
 
 							/* do we have a destination ??? -> start mission */
-							final_dest_bodyframe.x = bodyframe_pos_sp.x + params.mission_x_offset;
-							final_dest_bodyframe.y = bodyframe_pos_sp.y + params.mission_y_offset;
-							convert_setpoint_bodyframe2local(&local_pos, &filtered_flow,&att,
-									&final_dest_bodyframe, &final_dest_local);
+							final_dest_bodyframe.x = params.mission_x_offset;
+							final_dest_bodyframe.y = params.mission_y_offset;
+							convert_setpoint_bodyframe2local(&local_pos, &att, &final_dest_bodyframe, &final_dest_local);
 							final_dest_bodyframe.yaw = get_yaw(&local_pos, &final_dest_local); // changeable later
 							do_state_update(&mission_state, mavlink_fd, MISSION_STARTED);
 
@@ -457,8 +494,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 							/* no yaw correction in final sequence -> no need for waypoint update */
 							if(!mission_state.final_sequence){
 								/* calc final destination in bodyframe */
-								convert_setpoint_local2bodyframe(&local_pos, &filtered_flow, &att,
-										&final_dest_local, &final_dest_bodyframe);
+								convert_setpoint_local2bodyframe(&local_pos, &att, &final_dest_local, &final_dest_bodyframe);
 							}
 
 							/* calc yaw to final destination */
@@ -510,7 +546,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 										}
 
 										/* we need flow... step by step */
-										bodyframe_pos_sp.x = bodyframe_pos_sp.x + params.mission_update_step_x;
+										bodyframe_pos_sp.x = params.mission_update_step_x;
 
 //									if (fabsf(yaw_sp_error) > params.mission_yaw_thld && !mission_state.final_sequence) {
 //
@@ -529,8 +565,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 									} else {
 
 										/* calc offsets to final destination*/
-										float wp_bodyframe_offset_x = final_dest_bodyframe.x - bodyframe_pos_sp.x;
-										float wp_bodyframe_offset_y = final_dest_bodyframe.y - bodyframe_pos_sp.y;
+//										float wp_bodyframe_offset_x = final_dest_bodyframe.x - bodyframe_pos_sp.x;
+//										float wp_bodyframe_offset_y = final_dest_bodyframe.y - bodyframe_pos_sp.y;
 
 										/* final mission sequence? */
 										if(!mission_state.final_sequence){
@@ -538,34 +574,34 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 											// TODO this could be a bug !!!
 											bodyframe_pos_sp.yaw = yaw_final;
 
-											if (fabsf(wp_bodyframe_offset_x) < params.mission_wp_radius) {
+											if (fabsf(final_dest_bodyframe.x) < params.mission_wp_radius) {
 												mission_state.final_sequence = true;
 											}
 
 										} else {
 
-											if (fabsf(wp_bodyframe_offset_x) > params.mission_wp_radius) {
+											if (fabsf(final_dest_bodyframe.x) > params.mission_wp_radius) {
 												mission_state.final_sequence = false;
 											}
 										}
 
 										/* x */
-										int x_steps = (int)(wp_bodyframe_offset_x / params.mission_update_step_x);
+										int x_steps = (int)(final_dest_bodyframe.x / params.mission_update_step_x);
 
 										if (x_steps == 0) {
 
 											/* mission accomplished */
 											do_state_update(&mission_state, mavlink_fd, MISSION_ACCOMPLISHED);
 
-											bodyframe_pos_sp.x = bodyframe_pos_sp.x + wp_bodyframe_offset_x;
-											bodyframe_pos_sp.y = bodyframe_pos_sp.y + wp_bodyframe_offset_y;
+											bodyframe_pos_sp.x = final_dest_bodyframe.x;
+											bodyframe_pos_sp.y = final_dest_bodyframe.y;
 
 										} else {
 
 											/* x and y update steps */
-											bodyframe_pos_sp.x = bodyframe_pos_sp.x + sign(x_steps) * params.mission_update_step_x;
-											float update_step_y = wp_bodyframe_offset_y / fabsf((float) x_steps);
-											bodyframe_pos_sp.y = bodyframe_pos_sp.y + update_step_y;
+											bodyframe_pos_sp.x = sign(x_steps) * params.mission_update_step_x;
+											float update_step_y = final_dest_bodyframe.y / fabsf((float) x_steps);
+											bodyframe_pos_sp.y = update_step_y;
 
 										}
 									}
@@ -574,68 +610,84 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 									/* let radar controller do his job */
 									bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw + mission_state.step.yaw;
-									bodyframe_pos_sp.x = bodyframe_pos_sp.x + mission_state.step.x;
-									bodyframe_pos_sp.y = bodyframe_pos_sp.y + mission_state.step.y;
+									bodyframe_pos_sp.x = mission_state.step.x;
+									bodyframe_pos_sp.y = mission_state.step.y;
 								}
 
 							}
 
+							local_pos_sp.x = local_pos_sp.x + (att.R[0][0] * bodyframe_pos_sp.x + att.R[0][1] * bodyframe_pos_sp.y);
+							local_pos_sp.y = local_pos_sp.y + (att.R[1][0] * bodyframe_pos_sp.x + att.R[1][1] * bodyframe_pos_sp.y);
+							local_pos_sp.z = bodyframe_pos_sp.z;
+							local_pos_sp.yaw = bodyframe_pos_sp.yaw;
+							local_position_setpoint_changed = true;
 						}
 
-						/*
-						 * manually update position setpoint -> e.g. overwrite commands
-						 * from mission commander if something goes wrong
-						 */
-						if(manual.pitch < -0.2f) {
-							bodyframe_pos_sp.x += params.mission_update_step_x;
-						} else if (manual.pitch > 0.2f) {
-							bodyframe_pos_sp.x -= params.mission_update_step_x;
-						}
-
-						if(manual.roll < -0.2f) {
-							bodyframe_pos_sp.y -= params.mission_update_step_x;
-						} else if (manual.roll > 0.2f) {
-							bodyframe_pos_sp.y += params.mission_update_step_x;
-						}
-
-						if(manual.yaw < -1.0f) { // bigger threshold because of rc calibration for manual flight
-							bodyframe_pos_sp.yaw -= 2.0f * params.mission_update_step_yaw;
-						} else if (manual.yaw > 1.0f) {
-							bodyframe_pos_sp.yaw += 2.0f * params.mission_update_step_yaw;
-						}
-
-						/* modulo for rotation -pi +pi */
-						if(bodyframe_pos_sp.yaw < -M_PI_F) {
-							bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw + M_TWOPI_F;
-						} else if(bodyframe_pos_sp.yaw > M_PI_F) {
-							bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw - M_TWOPI_F;
-						}
+//						/*
+//						 * manually update position setpoint -> e.g. overwrite commands
+//						 * from mission commander if something goes wrong
+//						 */
+//						if(manual.pitch < -0.2f) {
+//							bodyframe_pos_sp.x += params.mission_update_step_x;
+//						} else if (manual.pitch > 0.2f) {
+//							bodyframe_pos_sp.x -= params.mission_update_step_x;
+//						}
+//
+//						if(manual.roll < -0.2f) {
+//							bodyframe_pos_sp.y -= params.mission_update_step_x;
+//						} else if (manual.roll > 0.2f) {
+//							bodyframe_pos_sp.y += params.mission_update_step_x;
+//						}
+//
+//						if(manual.yaw < -1.0f) { // bigger threshold because of rc calibration for manual flight
+//							bodyframe_pos_sp.yaw -= 2.0f * params.mission_update_step_yaw;
+//						} else if (manual.yaw > 1.0f) {
+//							bodyframe_pos_sp.yaw += 2.0f * params.mission_update_step_yaw;
+//						}
+//
+//						/* modulo for rotation -pi +pi */
+//						if(bodyframe_pos_sp.yaw < -M_PI_F) {
+//							bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw + M_TWOPI_F;
+//						} else if(bodyframe_pos_sp.yaw > M_PI_F) {
+//							bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw - M_TWOPI_F;
+//						}
 
 					} else
 					{
 						/* if back in auto or stabilized mode reset setpoint to current position */
-						bodyframe_pos_sp.x = filtered_flow.sumx;
-						bodyframe_pos_sp.y = filtered_flow.sumy;
-						bodyframe_pos_sp.yaw = att.yaw;
+						bodyframe_pos_sp.x = 0.0f;
+						bodyframe_pos_sp.y = 0.0f;
+						bodyframe_pos_sp.z = 0.0f; // ignored
+						local_pos_sp.x = local_pos.x;
+						local_pos_sp.y = local_pos.y;
+						local_pos_sp.z = local_pos.z; // ignored
+						if(isfinite(att.yaw))
+						{
+							local_pos_sp.yaw = att.yaw;
+							bodyframe_pos_sp.yaw = att.yaw;
+						}
+						local_position_setpoint_changed = true;
 					}
 
-					/* send new position setpoint */
-					if(isfinite(bodyframe_pos_sp.x) && isfinite(bodyframe_pos_sp.y) && isfinite(bodyframe_pos_sp.yaw))
+					if(local_position_setpoint_changed)
 					{
-						orb_publish(ORB_ID(vehicle_bodyframe_position_setpoint), vehicle_bodyframe_position_sp_pub, &bodyframe_pos_sp);
-					} else
-					{
-						printf("[mission commander] invalid bodyframe position setpoint!!!\n");
-					}
-
-					convert_setpoint_bodyframe2local(&local_pos,&filtered_flow,&att,&bodyframe_pos_sp,&local_pos_sp);
-
-					if(isfinite(local_pos_sp.x) && isfinite(local_pos_sp.y) && isfinite(local_pos_sp.yaw))
-					{
-						orb_publish(ORB_ID(vehicle_local_position_setpoint), vehicle_local_position_sp_pub, &local_pos_sp);
-					} else
-					{
-						printf("[mission commander] invalid local position setpoint!!!\n");
+						if(isfinite(local_pos_sp.x) && isfinite(local_pos_sp.y) && isfinite(local_pos_sp.yaw))
+						{
+							if(local_position_setpoint_adverted)
+							{
+								orb_publish(ORB_ID(vehicle_local_position_setpoint), vehicle_local_position_sp_pub, &local_pos_sp);
+							}
+							else
+							{
+								vehicle_local_position_sp_pub = orb_advertise(ORB_ID(vehicle_local_position_setpoint), &local_pos_sp);
+								local_position_setpoint_adverted = true;
+							}
+						}
+						else
+						{
+							printf("[mission commander] invalid local position setpoint!!!\n");
+						}
+						local_position_setpoint_changed = false;
 					}
 
 
@@ -698,7 +750,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	close(parameter_update_sub);
 	close(vehicle_attitude_sub);
 	close(vehicle_local_position_sub);
-	close(filtered_bottom_flow_sub);
 	close(vehicle_status_sub);
 	close(manual_control_setpoint_sub);
 	close(omnidirectional_flow_sub);

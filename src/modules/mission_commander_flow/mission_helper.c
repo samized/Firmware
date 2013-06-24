@@ -12,23 +12,21 @@
 
 void convert_setpoint_bodyframe2local(
 		struct vehicle_local_position_s *local_pos,
-		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp,
 		struct vehicle_local_position_setpoint_s *local_pos_sp
 		)
 {
-	static float wp_bodyframe_offset[3] = {0.0f, 0.0f, 0.0f};
-	static float wp_local_offset[3] = {0.0f, 0.0f, 0.0f};
+	static float wp_bodyframe_offset[2] = {0.0f, 0.0f};
+	static float wp_local_offset[2] = {0.0f, 0.0f};
 
-	wp_bodyframe_offset[0] = bodyframe_pos_sp->x - filtered_flow->sumx;
-	wp_bodyframe_offset[1] = bodyframe_pos_sp->y - filtered_flow->sumy;
-	wp_bodyframe_offset[2] = 0; // no influence of z...
+	wp_bodyframe_offset[0] = bodyframe_pos_sp->x;
+	wp_bodyframe_offset[1] = bodyframe_pos_sp->y;
 
 	/* calc current waypoint cooridnates in local */
-	for(uint8_t i = 0; i < 3; i++) {
+	for(uint8_t i = 0; i < 2; i++) {
 		float sum = 0.0f;
-		for(uint8_t j = 0; j < 3; j++) {
+		for(uint8_t j = 0; j < 2; j++) {
 			sum = sum + wp_bodyframe_offset[j] * att->R[i][j];
 		}
 		wp_local_offset[i] = sum;
@@ -36,37 +34,35 @@ void convert_setpoint_bodyframe2local(
 
 	local_pos_sp->x = local_pos->x + wp_local_offset[0];
 	local_pos_sp->y = local_pos->y + wp_local_offset[1];
-	local_pos_sp->z = bodyframe_pos_sp->z; // let z as it is...
+	local_pos_sp->z = bodyframe_pos_sp->z;
 	local_pos_sp->yaw = bodyframe_pos_sp->yaw;
 }
 
 void convert_setpoint_local2bodyframe(
 		struct vehicle_local_position_s *local_pos,
-		struct filtered_bottom_flow_s *filtered_flow,
 		struct vehicle_attitude_s *att,
 		struct vehicle_local_position_setpoint_s *local_pos_sp,
 		struct vehicle_bodyframe_position_setpoint_s *bodyframe_pos_sp
 		)
 {
-	static float wp_local_offset[3] = {0.0f, 0.0f, 0.0f}; // x,y
-	static float wp_bodyframe_offset[3] = {0.0f, 0.0f, 0.0f};
+	static float wp_local_offset[2] = {0.0f, 0.0f}; // x,y
+	static float wp_bodyframe_offset[2] = {0.0f, 0.0f};
 
 	wp_local_offset[0] = local_pos_sp->x - local_pos->x;
 	wp_local_offset[1] = local_pos_sp->y - local_pos->y;
-	wp_local_offset[2] = 0; // no influence of z...
 
 	/* calc current waypoint cooridnates in bodyframe */
-	for(uint8_t i = 0; i < 3; i++) {
+	for(uint8_t i = 0; i < 2; i++) {
 		float sum = 0.0f;
-		for(uint8_t j = 0; j < 3; j++) {
+		for(uint8_t j = 0; j < 2; j++) {
 			sum = sum + wp_local_offset[j] * att->R[j][i];
 		}
 		wp_bodyframe_offset[i] = sum;
 	}
 
-	bodyframe_pos_sp->x = filtered_flow->sumx + wp_bodyframe_offset[0];
-	bodyframe_pos_sp->y = filtered_flow->sumy + wp_bodyframe_offset[1];
-	bodyframe_pos_sp->z = local_pos_sp->z; // let z as it is...
+	bodyframe_pos_sp->x = wp_bodyframe_offset[0];
+	bodyframe_pos_sp->y = wp_bodyframe_offset[1];
+	bodyframe_pos_sp->z = local_pos_sp->z;
 	bodyframe_pos_sp->yaw = local_pos_sp->yaw;
 
 }

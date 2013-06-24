@@ -60,9 +60,11 @@ struct flow_position_control2_params {
 	float limit_thrust_lower;
 	float limit_yaw_step;
 	float manual_threshold;
+	float setpoint_radius;
 	float rc_scale_pitch;
 	float rc_scale_roll;
 	float rc_scale_yaw;
+	int debug;
 };
 
 struct flow_position_control2_param_handles {
@@ -84,9 +86,11 @@ struct flow_position_control2_param_handles {
 	param_t limit_thrust_lower;
 	param_t limit_yaw_step;
 	param_t manual_threshold;
+	param_t setpoint_radius;
 	param_t rc_scale_pitch;
 	param_t rc_scale_roll;
 	param_t rc_scale_yaw;
+	param_t debug;
 };
 
 /**

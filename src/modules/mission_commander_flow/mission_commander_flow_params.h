@@ -68,6 +68,10 @@ struct mission_commander_flow_params {
 	int counter_free_distance;
 	float radarControlSettings[10];
 	int debug; // boolean if mission planning manually
+	float manual_threshold;
+	float rc_scale_pitch;
+	float rc_scale_roll;
+	float rc_scale_yaw;
 };
 
 struct mission_commander_flow_param_handles {
@@ -90,6 +94,10 @@ struct mission_commander_flow_param_handles {
 	param_t reaction_min_pass_distance;
 	param_t reaction_min_free_distance;
 	param_t debug;
+	param_t manual_threshold;
+	param_t rc_scale_pitch;
+	param_t rc_scale_roll;
+	param_t rc_scale_yaw;
 };
 
 /**

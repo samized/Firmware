@@ -62,6 +62,7 @@
 #include <uORB/topics/vehicle_bodyframe_speed_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/filtered_bottom_flow.h>
+#include <uORB/topics/debug_key_value.h>
 #include <systemlib/systemlib.h>
 #include <systemlib/perf_counter.h>
 #include <systemlib/err.h>
@@ -163,9 +164,10 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	struct manual_control_setpoint_s manual;
 	struct filtered_bottom_flow_s filtered_flow;
 	struct vehicle_local_position_s local_pos;
-
 	struct vehicle_local_position_setpoint_s local_pos_sp;
+
 	struct vehicle_bodyframe_speed_setpoint_s speed_sp;
+	struct debug_key_value_s debug_value = { .key = "debug_value", .value = 0.0f };
 
 	/* subscribe to attitude, motor setpoints and system state */
 	int parameter_update_sub = orb_subscribe(ORB_ID(parameter_update));
@@ -174,11 +176,12 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	int manual_control_setpoint_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
 	int filtered_bottom_flow_sub = orb_subscribe(ORB_ID(filtered_bottom_flow));
 	int vehicle_local_position_sub = orb_subscribe(ORB_ID(vehicle_local_position));
+	int vehicle_local_position_setpoint_sub = orb_subscribe(ORB_ID(vehicle_local_position_setpoint));
 
 	orb_advert_t speed_sp_pub;
 	bool speed_setpoint_adverted = false;
-	orb_advert_t local_pos_sp_pub;
-	bool local_position_setpoint_adverted = false;
+	orb_advert_t debug_value_pub;
+	bool debug_value_adverted = false;
 
 	/* parameters init*/
 	struct flow_position_control2_params params;
@@ -187,8 +190,8 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	parameters_update(&param_handles, &params);
 
 	/* init setpoint */
-	float flow_sp_sumx = 0.0f;
-	float flow_sp_sumy = 0.0f;
+	float bodyframe_sp_x = 0.0f;
+	float bodyframe_sp_y = 0.0f;
 	local_pos_sp.x = 0.0f;
 	local_pos_sp.y = 0.0f;
 	local_pos_sp.z = 0.0f;
@@ -208,6 +211,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	/* states */
 	float integrated_h_error = 0.0f;
 	float last_local_pos_z = 0.0f;
+	bool manage_position_sp = true;
 	bool update_position_sp = false;
 	uint64_t last_time = 0.0f;
 	float dt = 0.0f; // s
@@ -226,14 +230,15 @@ flow_position_control2_thread_main(int argc, char *argv[])
 		if (sensors_ready)
 		{
 			/* polling */
-			struct pollfd fds[2] = {
-				{ .fd = filtered_bottom_flow_sub, .events = POLLIN }, // positions from estimator
+			struct pollfd fds[3] = {
+				{ .fd = filtered_bottom_flow_sub, .events = POLLIN },
+				{ .fd = vehicle_local_position_setpoint_sub, .events = POLLIN },
 				{ .fd = parameter_update_sub,   .events = POLLIN }
 
 			};
 
 			/* wait for a position update, check for exit condition every 500 ms */
-			int ret = poll(fds, 2, 500);
+			int ret = poll(fds, 3, 500);
 
 			if (ret < 0)
 			{
@@ -248,7 +253,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 			else
 			{
 				/* parameter update available? */
-				if (fds[1].revents & POLLIN)
+				if (fds[2].revents & POLLIN)
 				{
 					/* read from param to clear updated flag */
 					struct parameter_update_s update;
@@ -256,6 +261,40 @@ flow_position_control2_thread_main(int argc, char *argv[])
 
 					parameters_update(&param_handles, &params);
 					printf("[flow position control] parameters updated.\n");
+				}
+
+				/* new local position setpoint */
+				if(fds[1].revents & POLLIN)
+				{
+					/* got a position setpoint from another app
+					 * now the other app is responsible for the setpoint!
+					 * */
+//					float old_sp_x = local_pos_sp.x;
+//					float old_sp_y = local_pos_sp.y;
+
+					/* get a local copy of the vehicle state */
+					orb_copy(ORB_ID(vehicle_status), vehicle_status_sub, &vstatus);
+					/* get a local copy of attitude */
+					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
+					/* get a local copy of local position */
+					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
+					/* get a local copy of local posiition setpoint */
+					orb_copy(ORB_ID(vehicle_local_position_setpoint), vehicle_local_position_setpoint_sub, &local_pos_sp);
+
+					/* make calculation for bodyframe controlling */
+					float local_diff_x = local_pos_sp.x-local_pos.x;
+					float local_diff_y = local_pos_sp.y-local_pos.y;
+					bodyframe_sp_x = att.R[0][0] * local_diff_x + att.R[1][0] * local_diff_y;
+					bodyframe_sp_y = att.R[0][1] * local_diff_x + att.R[1][1] * local_diff_y;
+
+//					float local_diff_x = local_pos_sp.x - old_sp_x;
+//					float local_diff_y = local_pos_sp.y - old_sp_y;
+//					bodyframe_sp_x = bodyframe_sp_x + att.R[0][0] * local_diff_x + att.R[1][0] * local_diff_y;
+//					bodyframe_sp_y = bodyframe_sp_y + att.R[0][1] * local_diff_x + att.R[1][1] * local_diff_y;
+
+					yaw_sp = local_pos_sp.yaw;
+					/* TODO for start ignore z setpoint */
+					manage_position_sp = false;
 				}
 
 				/* only run controller if position/speed changed */
@@ -290,18 +329,47 @@ flow_position_control2_thread_main(int argc, char *argv[])
 						last_time = hrt_absolute_time();
 
 						/* update flow sum setpoint */
-						if (update_position_sp)
+						if (manage_position_sp && update_position_sp && !params.debug)
 						{
-							flow_sp_sumx = filtered_flow.sumx;
-							flow_sp_sumy = filtered_flow.sumy;
+							bodyframe_sp_x = 0.0f;
+							bodyframe_sp_y = 0.0f;
 							local_pos_sp.x = local_pos.x;
 							local_pos_sp.y = local_pos.y;
 							update_position_sp = false;
 						}
+						else
+						{
+							float local_diff_x = local_pos_sp.x-local_pos.x;
+							float local_diff_y = local_pos_sp.y-local_pos.y;
+
+							if (fabsf(local_diff_x) < params.setpoint_radius && fabsf(local_diff_y) < params.setpoint_radius)
+							{
+								/* this is in hover mode, the setpoint is almost at local position */
+
+								/* integrate bodyframe speed */
+								float diff_x = filtered_flow.vx * dt;
+								float diff_y = filtered_flow.vy * dt;
+
+								/* calc new bodyframe setpoint */
+								bodyframe_sp_x = bodyframe_sp_x - diff_x;
+								bodyframe_sp_y = bodyframe_sp_y - diff_y;
+							}
+							else
+							{
+								/* far away from setpoint, calculate stepwise the new bodyframe setpoint */
+
+								/* calc new bodyframe setpoint */
+								/* except of some small differences (because of roll and pitch angles)
+								 * we can take the rotation matrix
+								 */
+								bodyframe_sp_x = att.R[0][0] * local_diff_x + att.R[1][0] * local_diff_y;
+								bodyframe_sp_y = att.R[0][1] * local_diff_x + att.R[1][1] * local_diff_y;
+							}
+						}
 
 						/* calc new bodyframe speed setpoints */
-						float speed_body_x = (flow_sp_sumx - filtered_flow.sumx) * params.pos_p - filtered_flow.vx * params.pos_d;
-						float speed_body_y = (flow_sp_sumy - filtered_flow.sumy) * params.pos_p - filtered_flow.vy * params.pos_d;
+						float speed_body_x = bodyframe_sp_x * params.pos_p - filtered_flow.vx * params.pos_d;
+						float speed_body_y = bodyframe_sp_y * params.pos_p - filtered_flow.vy * params.pos_d;
 						float speed_limit_height_factor = height_sp; // the settings are for 1 meter
 
 						/* overwrite with rc input if there is any */
@@ -319,6 +387,27 @@ flow_position_control2_thread_main(int argc, char *argv[])
 								update_position_sp = true;
 							}
 						}
+
+						/* manual yaw change (only if we manage setpoint)*/
+						if (manage_position_sp)
+						{
+							if(isfinite(manual_yaw) && isfinite(manual.throttle))
+							{
+								if(fabsf(manual_yaw) > params.manual_threshold && manual.throttle > 0.2f)
+								{
+									yaw_sp += manual_yaw * params.limit_yaw_step;
+
+									/* modulo for rotation -pi +pi */
+									if(yaw_sp < -M_PI_F)
+										yaw_sp = yaw_sp + M_TWOPI_F;
+									else if(yaw_sp > M_PI_F)
+										yaw_sp = yaw_sp - M_TWOPI_F;
+								}
+							}
+						}
+
+						/* forward yaw setpoint */
+						speed_sp.yaw_sp = yaw_sp;
 
 						/* limit speed setpoints */
 						if((speed_body_x <= params.limit_speed_x * speed_limit_height_factor) &&
@@ -346,26 +435,6 @@ flow_position_control2_thread_main(int argc, char *argv[])
 							if(speed_body_y < -params.limit_speed_y * speed_limit_height_factor)
 								speed_sp.vy = -params.limit_speed_y * speed_limit_height_factor;
 						}
-
-						/* manual yaw change */
-						if(isfinite(manual_yaw) && isfinite(manual.throttle))
-						{
-							if(fabsf(manual_yaw) > params.manual_threshold && manual.throttle > 0.2f)
-							{
-								yaw_sp += manual_yaw * params.limit_yaw_step;
-
-								/* modulo for rotation -pi +pi */
-								if(yaw_sp < -M_PI_F)
-									yaw_sp = yaw_sp + M_TWOPI_F;
-								else if(yaw_sp > M_PI_F)
-									yaw_sp = yaw_sp - M_TWOPI_F;
-							}
-						}
-
-						/* forward yaw setpoint */
-						speed_sp.yaw_sp = yaw_sp;
-						local_pos_sp.yaw = yaw_sp;
-
 
 						/* manual height control
 						 * 0-20%: thrust linear down
@@ -517,18 +586,21 @@ flow_position_control2_thread_main(int argc, char *argv[])
 							warnx("NaN in flow position controller!");
 						}
 
-						/* publish new position setpoint */
-						if(isfinite(local_pos_sp.x) && isfinite(local_pos_sp.y) && isfinite(local_pos_sp.z) && isfinite(local_pos_sp.yaw))
+						// TODO
+						debug_value.value = bodyframe_sp_x;
+
+						/* publish new speed setpoint */
+						if(isfinite(debug_value.value))
 						{
 
-							if(local_position_setpoint_adverted)
+							if(debug_value_adverted)
 							{
-								orb_publish(ORB_ID(vehicle_local_position_setpoint), local_pos_sp_pub, &local_pos_sp);
+								orb_publish(ORB_ID(debug_key_value), debug_value_pub, &debug_value);
 							}
 							else
 							{
-								local_pos_sp_pub = orb_advertise(ORB_ID(vehicle_local_position_setpoint), &local_pos_sp);
-								local_position_setpoint_adverted = true;
+								debug_value_pub = orb_advertise(ORB_ID(debug_key_value), &debug_value);
+								debug_value_adverted = true;
 							}
 						}
 						else
@@ -541,8 +613,6 @@ flow_position_control2_thread_main(int argc, char *argv[])
 						/* in manual or stabilized state just reset speed and flow sum setpoint */
 						speed_sp.vx = 0.0f;
 						speed_sp.vy = 0.0f;
-						flow_sp_sumx = filtered_flow.sumx;
-						flow_sp_sumy = filtered_flow.sumy;
 						if(isfinite(att.yaw))
 						{
 							yaw_sp = att.yaw;

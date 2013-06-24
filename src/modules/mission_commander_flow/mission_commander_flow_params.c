@@ -85,6 +85,10 @@ int parameters_init(struct mission_commander_flow_param_handles *h)
 	h->reaction_min_pass_distance		=	param_find("MCF_REAC_PASS");
 	h->reaction_min_free_distance		=	param_find("MCF_REAC_FREE");
 	h->debug							=	param_find("MCF_DEBUG");
+	h->manual_threshold 				=	param_find("FPC_MAN_THR");
+	h->rc_scale_pitch					=   param_find("RC_SCALE_PITCH");
+	h->rc_scale_roll					=   param_find("RC_SCALE_ROLL");
+	h->rc_scale_yaw						=   param_find("RC_SCALE_YAW");
 
 	return OK;
 }
@@ -110,6 +114,10 @@ int parameters_update(const struct mission_commander_flow_param_handles *h, stru
 	param_get(h->reaction_min_pass_distance, &(p->reaction_min_pass_distance));
 	param_get(h->reaction_min_free_distance, &(p->reaction_min_free_distance));
 	param_get(h->debug, &(p->debug));
+	param_get(h->manual_threshold, &(p->manual_threshold));
+	param_get(h->rc_scale_pitch, &(p->rc_scale_pitch));
+	param_get(h->rc_scale_roll, &(p->rc_scale_roll));
+	param_get(h->rc_scale_yaw, &(p->rc_scale_yaw));
 
 	/* calc counters from other parameters */
 	p->counter_react_angle = (int)(p->reaction_min_react_angle / p->mission_update_step_yaw);
