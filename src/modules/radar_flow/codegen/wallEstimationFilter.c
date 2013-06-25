@@ -3,7 +3,7 @@
  *
  * Code generation for function 'wallEstimationFilter'
  *
- * C source code generated on: Wed May  8 17:06:46 2013
+ * C source code generated on: Tue Jun 25 15:14:02 2013
  *
  */
 
@@ -81,7 +81,8 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
   radar_weights_k[32], const real32_T flow_left[10], const real32_T flow_right
   [10], real32_T front_distance, const real32_T speed[2], const real32_T
   position_update[2], real32_T attitude_update, const real32_T settings[8],
-  boolean_T use_sonar, boolean_T use_position, real32_T radar[32], real32_T
+  const real32_T angles_sin[20], const real32_T unit_vectors[40], boolean_T
+  use_sonar, boolean_T use_position, real32_T radar[32], real32_T
   radar_filtered[32], real32_T radar_weights[32])
 {
   real32_T x_transition_add[32];
@@ -102,17 +103,6 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
   real32_T gamma_rear;
   real32_T invalid_flow_filter[10];
   real32_T vectors[20];
-  static const real32_T fv0[20] = { -0.939692616F, -0.866025388F, -0.766044438F,
-    -0.642787635F, -0.5F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
-    0.0F, 0.5F, 0.642787635F, 0.766044438F, 0.866025388F, 0.939692616F };
-
-  static const real32_T unit_vectors[40] = { 0.342020154F, 0.5F, 0.642787635F,
-    0.766044438F, 0.866025388F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F,
-    1.0F, 1.0F, 0.866025388F, 0.766044438F, 0.642787635F, 0.5F, 0.342020154F,
-    -0.939692616F, -0.866025388F, -0.766044438F, -0.642787635F, -0.5F, 0.0F,
-    0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.5F, 0.642787635F,
-    0.766044438F, 0.866025388F, 0.939692616F };
-
   real32_T y[10];
   real32_T A[20];
   real32_T wall[2];
@@ -125,12 +115,12 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
   int32_T y_size[1];
   int32_T b_y_size[1];
   real32_T c_tmp_data[10];
-  real32_T fv1[10];
+  real32_T fv0[10];
   int32_T c_y_size[1];
   int32_T d_y_size[1];
-  real32_T fv2[10];
+  real32_T fv1[10];
   boolean_T exitg2;
-  static const real32_T fv3[15] = { 0.196349546F, 0.392699093F, 0.589048624F,
+  static const real32_T fv2[15] = { 0.196349546F, 0.392699093F, 0.589048624F,
     0.785398185F, 0.981747746F, 1.17809725F, 1.37444675F, 1.57079637F,
     1.76714587F, 1.96349537F, 2.15984488F, 2.3561945F, 2.55254412F, 2.7488935F,
     2.94524312F };
@@ -148,6 +138,8 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
   /*             0,0,0,0,0,0,0,0,0,0,sind(28),sind(36),sind(44),sind(52),sind(60)]); */
   /*      angles_sin = single([sind(-70),sind(-62),sind(-54),sind(-46),sind(-38),... */
   /*             0,0,0,0,0,0,0,0,0,0,sind(38),sind(46),sind(54),sind(62),sind(70)]); */
+  /*      angles_sin = single([sind(-70),sind(-60),sind(-50),sind(-40),sind(-30),... */
+  /*             0,0,0,0,0,0,0,0,0,0,sind(30),sind(40),sind(50),sind(60),sind(70)]); */
   /*      unit_vectors = single([ sind(30),-cosd(30); */
   /*                              sind(38),-cosd(38); */
   /*                              sind(46),-cosd(46); */
@@ -171,6 +163,18 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
   /*                              sind(136),-cosd(136); */
   /*                              sind(144),-cosd(144); */
   /*                              sind(152),-cosd(152); */
+  /*                              sind(160),-cosd(160)]); */
+  /*      unit_vectors = single([ sind(20),-cosd(20); */
+  /*                              sind(30),-cosd(30); */
+  /*                              sind(40),-cosd(40); */
+  /*                              sind(50),-cosd(50); */
+  /*                              sind(60),-cosd(60); */
+  /*                              1,0;1,0;1,0;1,0;1,0; */
+  /*                              1,0;1,0;1,0;1,0;1,0; */
+  /*                              sind(120),-cosd(120); */
+  /*                              sind(130),-cosd(130); */
+  /*                              sind(140),-cosd(140); */
+  /*                              sind(150),-cosd(150); */
   /*                              sind(160),-cosd(160)]); */
   /*  const settings */
   /*  only fix resolution is efficient */
@@ -307,7 +311,7 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
     for (i = 0; i < 10; i++) {
       steps = flow_left[i] / 1000.0F;
       if ((real32_T)fabs(steps) > settings[1]) {
-        steps = speed[0] / steps * fv0[i];
+        steps = speed[0] / steps * angles_sin[i];
         if (steps > 0.0F) {
           for (i2 = 0; i2 < 2; i2++) {
             vectors[i + 10 * i2] = unit_vectors[i + 20 * i2] * steps;
@@ -364,8 +368,8 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
           invalid_flow_filter[i2] = y[i2] - steps;
         }
 
-        power(invalid_flow_filter, fv1);
-        det_coef_left = 1.0F - sum(fv1) / ss_tot;
+        power(invalid_flow_filter, fv0);
+        det_coef_left = 1.0F - sum(fv0) / ss_tot;
         for (i2 = 0; i2 < 2; i2++) {
           wall_est_left_data[i2] = wall[i2];
         }
@@ -381,7 +385,7 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
     for (i = 0; i < 10; i++) {
       steps = flow_right[i] / 1000.0F;
       if ((real32_T)fabs(steps) > settings[1]) {
-        steps = speed[0] / steps * fv0[10 + i];
+        steps = speed[0] / steps * angles_sin[10 + i];
         if (steps > 0.0F) {
           for (i2 = 0; i2 < 2; i2++) {
             vectors[i + 10 * i2] = unit_vectors[(i + 20 * i2) + 10] * steps;
@@ -436,8 +440,8 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
           invalid_flow_filter[i2] = y[i2] - steps;
         }
 
-        power(invalid_flow_filter, fv2);
-        det_coef_right = 1.0F - sum(fv2) / ss_tot;
+        power(invalid_flow_filter, fv1);
+        det_coef_right = 1.0F - sum(fv1) / ss_tot;
         for (i2 = 0; i2 < 2; i2++) {
           wall_est_right_data[i2] = wall[i2];
         }
@@ -464,8 +468,8 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
       i = 0;
       exitg2 = FALSE;
       while ((exitg2 == FALSE) && (i < 15)) {
-        steps = (3.14159274F - fv3[i]) - ss_tot;
-        gamma_rear = (3.14159274F - fv3[i]) - (3.14159274F - ss_tot);
+        steps = (3.14159274F - fv2[i]) - ss_tot;
+        gamma_rear = (3.14159274F - fv2[i]) - (3.14159274F - ss_tot);
 
         /*  TODO change */
         if (steps > 0.0F) {
@@ -505,8 +509,8 @@ void wallEstimationFilter(const real32_T radar_filtered_k[32], const real32_T
       i = 0;
       exitg1 = FALSE;
       while ((exitg1 == FALSE) && (i < 15)) {
-        steps = (3.14159274F - fv3[i]) - ss_tot;
-        gamma_rear = (3.14159274F - fv3[i]) - (3.14159274F - ss_tot);
+        steps = (3.14159274F - fv2[i]) - ss_tot;
+        gamma_rear = (3.14159274F - fv2[i]) - (3.14159274F - ss_tot);
         if (steps > 0.0F) {
           radar_distance_update_right[23 - i] = wall_est_right_data[1] /
             (real32_T)sin(steps) * (real32_T)sin(ss_tot);

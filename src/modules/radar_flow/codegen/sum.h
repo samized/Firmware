@@ -3,14 +3,13 @@
  *
  * Code generation for function 'sum'
  *
- * C source code generated on: Wed May  8 17:06:46 2013
+ * C source code generated on: Tue Jun 25 15:14:02 2013
  *
  */
 
 #ifndef __SUM_H__
 #define __SUM_H__
 /* Include files */
-#include <float.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>

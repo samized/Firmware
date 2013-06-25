@@ -59,6 +59,10 @@
 #include "codegen/frontFlowKalmanFilter.h"
 #include "codegen/wallEstimationFilter.h"
 
+#define ONBOARD_UNDISTORTION_ENABLED
+
+#define DEGREES_TO_RADIANS(angle) ((angle) / 180.0f * M_PI_F)
+
 static bool thread_should_exit = false;		/**< Daemon exit flag */
 static bool thread_running = false;		/**< Daemon status flag */
 static int daemon_task;				/**< Handle of daemon task / thread */
@@ -198,6 +202,63 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 	static float front_distance_filtered = 5.0f;
 
 	/* wall estimation parameters */
+	/* angles of sectors -> take from calibration */
+#ifdef ONBOARD_UNDISTORTION_ENABLED
+	const float alpha_l1 = DEGREES_TO_RADIANS( 68.6337f );
+	const float alpha_l2 = DEGREES_TO_RADIANS( 61.5184f );
+	const float alpha_l3 = DEGREES_TO_RADIANS( 54.1633f );
+	const float alpha_l4 = DEGREES_TO_RADIANS( 46.8029f );
+	const float alpha_l5 = DEGREES_TO_RADIANS( 39.6725f );
+
+	const float alpha_r5 = DEGREES_TO_RADIANS( 40.1327f );
+	const float alpha_r4 = DEGREES_TO_RADIANS( 47.2215f );
+	const float alpha_r3 = DEGREES_TO_RADIANS( 54.5239f );
+	const float alpha_r2 = DEGREES_TO_RADIANS( 61.8094f );
+	const float alpha_r1 = DEGREES_TO_RADIANS( 68.8505f );
+#else /* ONBOARD_UNDISTORTION_ENABLED */
+	const float alpha_l1 = DEGREES_TO_RADIANS( 70.0f );
+	const float alpha_l2 = DEGREES_TO_RADIANS( 60.0f );
+	const float alpha_l3 = DEGREES_TO_RADIANS( 50.0f );
+	const float alpha_l4 = DEGREES_TO_RADIANS( 40.0f );
+	const float alpha_l5 = DEGREES_TO_RADIANS( 30.0f );
+
+	const float alpha_r5 = DEGREES_TO_RADIANS( 30.0f );
+	const float alpha_r4 = DEGREES_TO_RADIANS( 40.0f );
+	const float alpha_r3 = DEGREES_TO_RADIANS( 50.0f );
+	const float alpha_r2 = DEGREES_TO_RADIANS( 60.0f );
+	const float alpha_r1 = DEGREES_TO_RADIANS( 70.0f );
+#endif /* ONBOARD_UNDISTORTION_ENABLED */
+
+	const float angles_sin[20] = {
+			sinf(-alpha_l1),
+			sinf(-alpha_l2),
+			sinf(-alpha_l3),
+			sinf(-alpha_l4),
+			sinf(-alpha_l5),
+			0.0f,0.0f,0.0f,0.0f,0.0f,
+			0.0f,0.0f,0.0f,0.0f,0.0f,
+			sinf(alpha_r5),
+			sinf(alpha_r4),
+			sinf(alpha_r3),
+			sinf(alpha_r2),
+			sinf(alpha_r1)
+	};
+	/* unit vectors of sectors -> take from calibration */
+	const float unit_vectors[40] = {
+			sinf(M_PI_2_F - alpha_l1), sinf(M_PI_2_F - alpha_l2),
+			sinf(M_PI_2_F - alpha_l3), sinf(M_PI_2_F - alpha_l4),
+			sinf(M_PI_2_F - alpha_l5), 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+			1.0f, 1.0f, 1.0f, 1.0f, 1.0f, sinf(M_PI_2_F + alpha_r5),
+			sinf(M_PI_2_F + alpha_r4), sinf(M_PI_2_F + alpha_r3),
+			sinf(M_PI_2_F + alpha_r2), sinf(M_PI_2_F + alpha_r1),
+			-cosf(M_PI_2_F - alpha_l1), -cosf(M_PI_2_F - alpha_l2),
+			-cosf(M_PI_2_F - alpha_l3), -cosf(M_PI_2_F - alpha_l4),
+			-cosf(M_PI_2_F - alpha_l5), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -cosf(M_PI_2_F + alpha_r5),
+			-cosf(M_PI_2_F + alpha_r4), -cosf(M_PI_2_F + alpha_r3),
+			-cosf(M_PI_2_F + alpha_r2), -cosf(M_PI_2_F + alpha_r1)
+	};
+
 	static float filter_settings[8] = { 0.0f };
 	static float position_last[2] = { 0.0f };
 	static float position_update[2] = { 0.0f };
@@ -389,7 +450,8 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 					wallEstimationFilter(radar_filtered_k, radar_weights_k, omni_left_filtered, omni_right_filtered,
 							front_distance_filtered, speed_filtered, position_update, yaw_update, filter_settings,
-							((bool) params.with_sonar), ((bool) params.with_pos_update), radar, radar_filtered, radar_weights);
+							angles_sin, unit_vectors, ((bool) params.with_sonar), ((bool) params.with_pos_update),
+							radar, radar_filtered, radar_weights);
 					memcpy(radar_filtered_k, radar_filtered, sizeof(radar_filtered));
 					memcpy(radar_weights_k, radar_weights, sizeof(radar_weights));
 
