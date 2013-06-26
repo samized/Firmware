@@ -43,6 +43,7 @@
 
 struct flow_speed_control_params {
 	float speed_p;
+	float speed_i;
 	float limit_pitch;
 	float limit_roll;
 	float trim_roll;
@@ -51,6 +52,7 @@ struct flow_speed_control_params {
 
 struct flow_speed_control_param_handles {
 	param_t speed_p;
+	param_t speed_i;
 	param_t limit_pitch;
 	param_t limit_roll;
 	param_t trim_roll;

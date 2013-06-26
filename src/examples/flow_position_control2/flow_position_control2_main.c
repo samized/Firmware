@@ -210,6 +210,8 @@ flow_position_control2_thread_main(int argc, char *argv[])
 
 	/* states */
 	float integrated_h_error = 0.0f;
+	float integrated_bodyframe_pos_err_x = 0.0f;
+	float integrated_bodyframe_pos_err_y = 0.0f;
 	float last_local_pos_z = 0.0f;
 	bool manage_position_sp = true;
 	bool update_position_sp = false;
@@ -353,6 +355,10 @@ flow_position_control2_thread_main(int argc, char *argv[])
 								/* calc new bodyframe setpoint */
 								bodyframe_sp_x = bodyframe_sp_x - diff_x;
 								bodyframe_sp_y = bodyframe_sp_y - diff_y;
+
+								/* calc integrated bodyframe position error */
+								integrated_bodyframe_pos_err_x += bodyframe_sp_x * dt;
+								integrated_bodyframe_pos_err_y += bodyframe_sp_y * dt;
 							}
 							else
 							{
@@ -368,8 +374,12 @@ flow_position_control2_thread_main(int argc, char *argv[])
 						}
 
 						/* calc new bodyframe speed setpoints */
-						float speed_body_x = bodyframe_sp_x * params.pos_p - filtered_flow.vx * params.pos_d;
-						float speed_body_y = bodyframe_sp_y * params.pos_p - filtered_flow.vy * params.pos_d;
+						float speed_body_x = bodyframe_sp_x * params.pos_p +
+								integrated_bodyframe_pos_err_x * params.pos_i -
+								filtered_flow.vx * params.pos_d;
+						float speed_body_y = bodyframe_sp_y * params.pos_p +
+								integrated_bodyframe_pos_err_y * params.pos_i -
+								filtered_flow.vy * params.pos_d;
 						float speed_limit_height_factor = height_sp; // the settings are for 1 meter
 
 						/* overwrite with rc input if there is any */
@@ -498,6 +508,10 @@ flow_position_control2_thread_main(int argc, char *argv[])
 										start_phase = true;
 										/* reset height setpoint */
 										height_sp = params.height_min;
+
+										/* reset position error integrals */
+										integrated_bodyframe_pos_err_x = 0.0f;
+										integrated_bodyframe_pos_err_y = 0.0f;
 									}
 								}
 								else
@@ -586,8 +600,8 @@ flow_position_control2_thread_main(int argc, char *argv[])
 							warnx("NaN in flow position controller!");
 						}
 
-						// TODO
-						debug_value.value = bodyframe_sp_x;
+						// TODO remove before flight ;)
+						debug_value.value = height_sp;
 
 						/* publish new speed setpoint */
 						if(isfinite(debug_value.value))
