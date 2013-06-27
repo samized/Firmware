@@ -167,7 +167,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 	struct vehicle_local_position_setpoint_s local_pos_sp;
 
 	struct vehicle_bodyframe_speed_setpoint_s speed_sp;
-	struct debug_key_value_s debug_value = { .key = "debug_value", .value = 0.0f };
+	struct debug_key_value_s debug_value = { .key = "height_sp", .value = 0.0f };
 
 	/* subscribe to attitude, motor setpoints and system state */
 	int parameter_update_sub = orb_subscribe(ORB_ID(parameter_update));
@@ -553,8 +553,8 @@ flow_position_control2_thread_main(int argc, char *argv[])
 									if(integrated_thrust_addition < -params.limit_thrust_int)
 										integrated_thrust_addition = -params.limit_thrust_int;
 
-									float height_speed = last_local_pos_z - local_pos.z;
-									float thrust_diff = height_error * params.height_p - height_speed * params.height_d;
+//									float height_speed = last_local_pos_z - local_pos.z;
+									float thrust_diff = height_error * params.height_p - local_pos.vz * params.height_d;
 
 									thrust_control = params.thrust_feedforward + thrust_diff + integrated_thrust_addition;
 
@@ -601,7 +601,7 @@ flow_position_control2_thread_main(int argc, char *argv[])
 						}
 
 						// TODO remove before flight ;)
-						debug_value.value = height_sp;
+						debug_value.value = -height_sp;
 
 						/* publish new speed setpoint */
 						if(isfinite(debug_value.value))

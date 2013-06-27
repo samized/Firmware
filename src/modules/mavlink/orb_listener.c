@@ -741,7 +741,7 @@ uorb_receive_start(void)
 
 	/* --- LOCAL POS VALUE --- */
 	mavlink_subs.local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
-	orb_set_interval(mavlink_subs.local_pos_sub, 200);	/* 1Hz active updates */
+	orb_set_interval(mavlink_subs.local_pos_sub, 100);	/* 1Hz active updates */
 
 	/* --- GLOBAL SETPOINT VALUE --- */
 	mavlink_subs.spg_sub = orb_subscribe(ORB_ID(vehicle_global_position_setpoint));

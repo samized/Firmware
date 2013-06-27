@@ -151,10 +151,12 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 	static float global_speed[2] = {0.0f, 0.0f};
 	static uint32_t counter = 0;
 	static uint64_t time_last_flow = 0; // in ms
+	static uint64_t time_last_sonar = 0;
 	static float dt = 0.0f; // seconds
 	static float sonar_last = 0.0f;
 	static bool sonar_valid = false;
 	static float sonar_lp = 0.0f;
+	static float sonar_speed = 0.0f;
 
 	/* subscribe to vehicle status, attitude, sensors and flow*/
 	struct vehicle_status_s vstatus;
@@ -288,6 +290,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					if(time_last_flow == 0)
 					{
 						time_last_flow = flow.timestamp;
+						time_last_sonar = flow.timestamp;
 						continue;
 					}
 					dt = (float)(flow.timestamp - time_last_flow) * time_scale ;
@@ -357,9 +360,23 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 					{
 						/* simple lowpass sonar filtering */
 						/* if new value or with sonar update frequency */
-						if (sonar_new != sonar_last || counter % 10 == 0)
+
+						/* we have no indication if the sonar value is new
+						 * because of this we need a workaround
+						 * sonar runs around 10Hz
+						 */
+						float dt_sonar = (float)(flow.timestamp - time_last_sonar) * time_scale ;
+
+						if (sonar_new != sonar_last || dt_sonar > 0.11f)
 						{
+							time_last_sonar = flow.timestamp;
+
+							/* low_pass */
 							sonar_lp = 0.05f * sonar_new + 0.95f * sonar_lp;
+
+							/* calc speed */
+							sonar_speed = (sonar_new - sonar_last) / dt_sonar;
+
 							sonar_last = sonar_new;
 						}
 
@@ -369,10 +386,12 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 						if (height_diff < -params.sonar_lower_lp_threshold || height_diff > params.sonar_upper_lp_threshold)
 						{
 							local_pos.z = -sonar_lp;
+							local_pos.vz = 0.0f; // unknown
 						}
 						else
 						{
 							local_pos.z = -sonar_new;
+							local_pos.vz = sonar_speed;
 						}
 					}
 
@@ -381,7 +400,7 @@ int flow_position_estimator_thread_main(int argc, char *argv[])
 
 					/* publish local position */
 					if(isfinite(local_pos.x) && isfinite(local_pos.y) && isfinite(local_pos.z)
-							&& isfinite(local_pos.vx) && isfinite(local_pos.vy))
+							&& isfinite(local_pos.vx) && isfinite(local_pos.vy) && isfinite(local_pos.vz))
 					{
 						orb_publish(ORB_ID(vehicle_local_position), local_pos_pub, &local_pos);
 					}
