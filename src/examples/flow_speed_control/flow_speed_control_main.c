@@ -119,7 +119,7 @@ int flow_speed_control_main(int argc, char *argv[])
 		deamon_task = task_spawn("flow_speed_control",
 					 SCHED_DEFAULT,
 					 SCHED_PRIORITY_MAX - 6,
-					 4096,
+					 2048,
 					 flow_speed_control_thread_main,
 					 (argv) ? (const char **)&argv[2] : (const char **)NULL);
 		exit(0);

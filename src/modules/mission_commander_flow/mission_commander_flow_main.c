@@ -123,7 +123,7 @@ int mission_commander_flow_main(int argc, char *argv[])
 		daemon_task = task_spawn("mission_commander_flow",
 					 SCHED_RR,
 					 SCHED_PRIORITY_MAX - 60,
-					 8192,
+					 4096,
 					 mission_commander_flow_thread_main,
 					 (argv) ? (const char **)&argv[2] : (const char **)NULL);
 		exit(0);

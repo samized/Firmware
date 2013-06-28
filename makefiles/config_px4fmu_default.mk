@@ -85,7 +85,8 @@ MODULES		+= modules/mission_commander_flow
 #
 # Logging
 #
-MODULES		+= modules/sdlog2
+#MODULES		+= modules/sdlog2
+MODULES		+= modules/sdlog
 
 #
 # Library modules

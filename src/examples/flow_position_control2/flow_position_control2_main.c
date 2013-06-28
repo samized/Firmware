@@ -122,7 +122,7 @@ int flow_position_control2_main(int argc, char *argv[])
 		deamon_task = task_spawn("flow_position_control2",
 					 SCHED_DEFAULT,
 					 SCHED_PRIORITY_MAX - 6,
-					 4096,
+					 2048,
 					 flow_position_control2_thread_main,
 					 (argv) ? (const char **)&argv[2] : (const char **)NULL);
 		exit(0);
