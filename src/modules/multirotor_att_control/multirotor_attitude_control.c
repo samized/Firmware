@@ -1,12 +1,12 @@
 /****************************************************************************
  *
  *   Copyright (C) 2008-2012 PX4 Development Team. All rights reserved.
- *   Author: @author Thomas Gubler <thomasgubler@student.ethz.ch>
- *           @author Julian Oes <joes@student.ethz.ch>
- *           @author Laurens Mackay <mackayl@student.ethz.ch>
- *           @author Tobias Naegeli <naegelit@student.ethz.ch>
- *           @author Martin Rutschmann <rutmarti@student.ethz.ch>
- *           @author Lorenz Meier <lm@inf.ethz.ch>
+ *   Author: Thomas Gubler <thomasgubler@student.ethz.ch>
+ *           Julian Oes <joes@student.ethz.ch>
+ *           Laurens Mackay <mackayl@student.ethz.ch>
+ *           Tobias Naegeli <naegelit@student.ethz.ch>
+ *           Martin Rutschmann <rutmarti@student.ethz.ch>
+ *           Lorenz Meier <lm@inf.ethz.ch>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -39,7 +39,15 @@
 
 /*
  * @file multirotor_attitude_control.c
- * Implementation of attitude controller
+ *
+ * Implementation of attitude controller for multirotors.
+ *
+ * @author Thomas Gubler <thomasgubler@student.ethz.ch>
+ * @author Julian Oes <joes@student.ethz.ch>
+ * @author Laurens Mackay <mackayl@student.ethz.ch>
+ * @author Tobias Naegeli <naegelit@student.ethz.ch>
+ * @author Martin Rutschmann <rutmarti@student.ethz.ch>
+ * @author Lorenz Meier <lm@inf.ethz.ch>
  */
 
 #include "multirotor_attitude_control.h"
@@ -63,15 +71,11 @@ void multirotor_control_attitude(const struct vehicle_attitude_setpoint_s *att_s
 	static uint64_t last_run = 0;
 	static uint64_t last_input = 0;
 	float deltaT = (hrt_absolute_time() - last_run) / 1000000.0f;
-	float dT_input = (hrt_absolute_time() - last_input) / 1000000.0f;
 	last_run = hrt_absolute_time();
 
 	if (last_input != att_sp->timestamp) {
 		last_input = att_sp->timestamp;
 	}
-
-	static int sensor_delay;
-	sensor_delay = hrt_absolute_time() - att->timestamp;
 
 	static int motor_skip_counter = 0;
 
@@ -87,16 +91,16 @@ void multirotor_control_attitude(const struct vehicle_attitude_setpoint_s *att_s
 	if (initialized == false) {
 
 		pid_init(&pitch_controller, params->att_p, params->att_i, params->att_d, 1000.0f,
-				1000.0f, PID_MODE_DERIVATIV_SET);
+				1000.0f, PID_MODE_DERIVATIV_SET, 0.0f);
 		pid_init(&roll_controller, params->att_p, params->att_i, params->att_d, 1000.0f,
-				1000.0f, PID_MODE_DERIVATIV_SET);
+				1000.0f, PID_MODE_DERIVATIV_SET, 0.0f);
 		pid_init(&yaw_controller, params->yaw_p, params->yaw_i, params->yaw_d, params->yaw_intmax,
-				1000.0f, PID_MODE_DERIVATIV_SET);
+				1000.0f, PID_MODE_DERIVATIV_SET, 0.0f);
 
 		initialized = true;
 	}
 
-	/* load new parameters with lower rate */
+	/* load new parameters if needed */
 	if (params_updated) {
 		/* apply parameters */
 		pid_set_parameters(&pitch_controller, params->att_p, params->att_i, params->att_d, 1000.0f, 1000.0f);
@@ -105,7 +109,7 @@ void multirotor_control_attitude(const struct vehicle_attitude_setpoint_s *att_s
 	}
 
 	/* reset integral if on ground */
-	if (att_sp->thrust < 0.1f) {
+	if (att_sp->thrust < 0.01f) {
 		pid_reset_integral(&pitch_controller);
 		pid_reset_integral(&roll_controller);
 		pid_reset_integral(&yaw_controller);
