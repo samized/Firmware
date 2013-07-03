@@ -399,7 +399,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					/* get a local copy of local position */
 					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
 
-					if (mission_state.state == MISSION_STARTED || params.debug) {
+//					if (mission_state.state == MISSION_STARTED || params.debug) {
+					if (mission_state.state == MISSION_STARTED) {
 						/* test if enough space */
 						if ((discrete_radar.sonar * 1000.0f) > params.mission_min_front_dist) {
 
@@ -534,7 +535,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 							} else {
 
-								if (mission_state.free_to_go || mission_state.final_sequence) {
+								/* in debug there is no final destination, and no course correction */
+								if ((mission_state.free_to_go || mission_state.final_sequence) && !params.debug) {
 									/* there are no obstacles */
 
 									/* correct yaw if needed */
