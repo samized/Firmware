@@ -1,7 +1,7 @@
 /*
- * mean.c
+ * mod.c
  *
- * Code generation for function 'mean'
+ * Code generation for function 'mod'
  *
  * C source code generated on: Fri Jul  5 14:52:28 2013
  *
@@ -12,7 +12,7 @@
 #include "frontFlowKalmanFilter.h"
 #include "wallEstimationFilter.h"
 #include "wallEstimationFilter2.h"
-#include "mean.h"
+#include "mod.h"
 
 /* Type Definitions */
 
@@ -25,21 +25,9 @@
 /* Function Declarations */
 
 /* Function Definitions */
-real32_T mean(const real32_T x_data[10], const int32_T x_size[1])
+real32_T b_mod(real32_T x, real32_T y)
 {
-  real32_T y;
-  int32_T k;
-  if (x_size[0] == 0) {
-    y = 0.0F;
-  } else {
-    y = x_data[0];
-    for (k = 2; k <= x_size[0]; k++) {
-      y += x_data[k - 1];
-    }
-  }
-
-  y /= (real32_T)x_size[0];
-  return y;
+  return x - (real32_T)floor(x / 32.0F) * 32.0F;
 }
 
-/* End of code generation (mean.c) */
+/* End of code generation (mod.c) */

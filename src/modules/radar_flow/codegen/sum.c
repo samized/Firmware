@@ -3,7 +3,7 @@
  *
  * Code generation for function 'sum'
  *
- * C source code generated on: Tue Jun 25 15:14:02 2013
+ * C source code generated on: Fri Jul  5 14:52:28 2013
  *
  */
 
@@ -11,6 +11,7 @@
 #include "rt_nonfinite.h"
 #include "frontFlowKalmanFilter.h"
 #include "wallEstimationFilter.h"
+#include "wallEstimationFilter2.h"
 #include "sum.h"
 
 /* Type Definitions */
@@ -35,6 +36,18 @@ real32_T b_sum(const real32_T x_data[10], const int32_T x_size[1])
     for (k = 2; k <= x_size[0]; k++) {
       y += x_data[k - 1];
     }
+  }
+
+  return y;
+}
+
+real_T c_sum(const boolean_T x[10])
+{
+  real_T y;
+  int32_T k;
+  y = (real_T)x[0];
+  for (k = 0; k < 9; k++) {
+    y += (real_T)x[k + 1];
   }
 
   return y;

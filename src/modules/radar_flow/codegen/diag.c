@@ -1,7 +1,7 @@
 /*
- * mean.c
+ * diag.c
  *
- * Code generation for function 'mean'
+ * Code generation for function 'diag'
  *
  * C source code generated on: Fri Jul  5 14:52:28 2013
  *
@@ -12,7 +12,7 @@
 #include "frontFlowKalmanFilter.h"
 #include "wallEstimationFilter.h"
 #include "wallEstimationFilter2.h"
-#include "mean.h"
+#include "diag.h"
 
 /* Type Definitions */
 
@@ -25,21 +25,13 @@
 /* Function Declarations */
 
 /* Function Definitions */
-real32_T mean(const real32_T x_data[10], const int32_T x_size[1])
+void diag(const real32_T v[10], real32_T d[100])
 {
-  real32_T y;
-  int32_T k;
-  if (x_size[0] == 0) {
-    y = 0.0F;
-  } else {
-    y = x_data[0];
-    for (k = 2; k <= x_size[0]; k++) {
-      y += x_data[k - 1];
-    }
+  int32_T j;
+  memset(&d[0], 0, 100U * sizeof(real32_T));
+  for (j = 0; j < 10; j++) {
+    d[j + 10 * j] = v[j];
   }
-
-  y /= (real32_T)x_size[0];
-  return y;
 }
 
-/* End of code generation (mean.c) */
+/* End of code generation (diag.c) */

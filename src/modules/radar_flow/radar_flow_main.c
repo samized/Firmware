@@ -33,7 +33,7 @@
  ****************************************************************************/
 
 /**
- * @file radar_flow.c
+ * @file radar_flow_main.c
  * Handling omnidirectional flow msg and provide radar information
  */
 
@@ -58,6 +58,7 @@
 #include "radar_sounds.h"
 #include "codegen/frontFlowKalmanFilter.h"
 #include "codegen/wallEstimationFilter.h"
+#include "codegen/wallEstimationFilter2.h"
 
 #define ONBOARD_UNDISTORTION_ENABLED
 
@@ -112,6 +113,8 @@ int radar_flow_main(int argc, char *argv[])
 			exit(0);
 		}
 
+//		8162
+//		12158
 		thread_should_exit = false;
 		daemon_task = task_spawn("radar_flow",
 					 SCHED_RR,
@@ -259,16 +262,36 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 			-cosf(M_PI_2_F + alpha_r2), -cosf(M_PI_2_F + alpha_r1)
 	};
 
-	static float filter_settings[8] = { 0.0f };
-	static float position_last[2] = { 0.0f };
-	static float position_update[2] = { 0.0f };
+	const float weight_left[10] = {
+			sinf(alpha_l1),
+			sinf(alpha_l2),
+			sinf(alpha_l3),
+			sinf(alpha_l4),
+			sinf(alpha_l5),
+			0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+	};
+	const float weight_right[10] = {
+			0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+			sinf(alpha_r5),
+			sinf(alpha_r4),
+			sinf(alpha_r3),
+			sinf(alpha_r2),
+			sinf(alpha_r1)
+	};
+
+	static float position_last[2] = { 0.0f, 0.0f };
+	static float position_update[2] = { 0.0f, 0.0f };
 	static float yaw_last = 0.0f;
 	static float yaw_update = 0.0f;
-	static float radar[32] = { 0.0f };
-	static float radar_filtered[32] = { 0.0f };
-	static float radar_weights[32] = { 0.0f };
-	static float radar_filtered_k[32] = { 0.0f };
-	static float radar_weights_k[32] = { 0.0f };
+	static float radar[32];
+	static float radar_filtered[32];
+	static float radar_weights[32];
+	static float radar_filtered_k[32];
+	static float radar_weights_k[32];
+	static float wall_hist_left[40];
+	static float wall_hist_right[40];
+	static float wall_hist_left_k[40];
+	static float wall_hist_right_k[40];
 	static const float distance_max = 5.0f;
 	static float distance_left = distance_max;
 	static float distance_right = distance_max;
@@ -279,15 +302,6 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 	static bool sensors_ready = false;
 	static bool update_initialized = false;
 
-	filter_settings[0] = params.s0;
-	filter_settings[1] = params.s1;
-	filter_settings[2] = params.s2;
-	filter_settings[3] = params.s3;
-	filter_settings[4] = params.s4;
-	filter_settings[5] = params.s5;
-	filter_settings[6] = params.s6;
-	filter_settings[7] = params.s7;
-
 	/* initialize radar */
 	for (int i = 0; i<32; i++) {
 		radar[i] = distance_max;
@@ -295,6 +309,13 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 		radar_filtered_k[i] = distance_max;
 		radar_weights[i] = 1.0f;
 		radar_weights_k[i] = 1.0f;
+	}
+
+	for (int i = 0; i<40; i++) {
+		wall_hist_left[i] = 0.0f;
+		wall_hist_right[i] = 0.0f;
+		wall_hist_left_k[i] = 0.0f;
+		wall_hist_right_k[i] = 0.0f;
 	}
 
 
@@ -329,15 +350,6 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					orb_copy(ORB_ID(parameter_update), parameter_update_sub, &update);
 
 					parameters_update(&param_handles, &params);
-
-					filter_settings[0] = params.s0;
-					filter_settings[1] = params.s1;
-					filter_settings[2] = params.s2;
-					filter_settings[3] = params.s3;
-					filter_settings[4] = params.s4;
-					filter_settings[5] = params.s5;
-					filter_settings[6] = params.s6;
-					filter_settings[7] = params.s7;
 
 					printf("[radar] parameters updated.\n");
 				}
@@ -401,30 +413,38 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 						omni_right_filtered[i] = -flow_aposteriori[18 - i*2];
 					}
 
+					speed_filtered[0] = speed_aposteriori[0];
+					speed_filtered[1] = speed_aposteriori[2];
+
 					/* send filtered flow values ------------------------------------------------------------------ */
 					//debug
 					if (params.debug) {
-						discrete_radar.distances[4] = omni_left_filtered[0];
-						discrete_radar.distances[5] = omni_left_filtered[1];
-						discrete_radar.distances[6] = omni_left_filtered[2];
-						discrete_radar.distances[7] = omni_left_filtered[3];
-						discrete_radar.distances[8] = omni_left_filtered[4];
-						discrete_radar.distances[9] = omni_left_filtered[5];
-						discrete_radar.distances[10] = omni_left_filtered[6];
-						discrete_radar.distances[11] = omni_left_filtered[7];
-						discrete_radar.distances[12] = omni_left_filtered[8];
-						discrete_radar.distances[13] = omni_left_filtered[9];
+						discrete_radar.distances[1] = front_distance_filtered * 1000.0f;
 
-						discrete_radar.distances[19] = omni_right_filtered[0];
-						discrete_radar.distances[20] = omni_right_filtered[1];
-						discrete_radar.distances[21] = omni_right_filtered[2];
-						discrete_radar.distances[22] = omni_right_filtered[3];
-						discrete_radar.distances[23] = omni_right_filtered[4];
-						discrete_radar.distances[24] = omni_right_filtered[5];
-						discrete_radar.distances[25] = omni_right_filtered[6];
-						discrete_radar.distances[26] = omni_right_filtered[7];
-						discrete_radar.distances[27] = omni_right_filtered[8];
-						discrete_radar.distances[28] = omni_right_filtered[9];
+						discrete_radar.distances[2] = speed_filtered[0] * 1000.0f;
+						discrete_radar.distances[3] = speed_filtered[1] * 1000.0f;
+
+						discrete_radar.distances[4] = omni_left_filtered[0] * 1000.0f;
+						discrete_radar.distances[5] = omni_left_filtered[1] * 1000.0f;
+						discrete_radar.distances[6] = omni_left_filtered[2] * 1000.0f;
+						discrete_radar.distances[7] = omni_left_filtered[3] * 1000.0f;
+						discrete_radar.distances[8] = omni_left_filtered[4] * 1000.0f;
+						discrete_radar.distances[9] = omni_left_filtered[5] * 1000.0f;
+						discrete_radar.distances[10] = omni_left_filtered[6] * 1000.0f;
+						discrete_radar.distances[11] = omni_left_filtered[7] * 1000.0f;
+						discrete_radar.distances[12] = omni_left_filtered[8] * 1000.0f;
+						discrete_radar.distances[13] = omni_left_filtered[9] * 1000.0f;
+
+						discrete_radar.distances[19] = omni_right_filtered[0] * 1000.0f;
+						discrete_radar.distances[20] = omni_right_filtered[1] * 1000.0f;
+						discrete_radar.distances[21] = omni_right_filtered[2] * 1000.0f;
+						discrete_radar.distances[22] = omni_right_filtered[3] * 1000.0f;
+						discrete_radar.distances[23] = omni_right_filtered[4] * 1000.0f;
+						discrete_radar.distances[24] = omni_right_filtered[5] * 1000.0f;
+						discrete_radar.distances[25] = omni_right_filtered[6] * 1000.0f;
+						discrete_radar.distances[26] = omni_right_filtered[7] * 1000.0f;
+						discrete_radar.distances[27] = omni_right_filtered[8] * 1000.0f;
+						discrete_radar.distances[28] = omni_right_filtered[9] * 1000.0f;
 						discrete_radar.timestamp = hrt_absolute_time();
 						orb_publish(ORB_ID(discrete_radar), discrete_radar_pub, &discrete_radar);
 						continue;
@@ -432,8 +452,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 					/* send radar values ------------------------------------------------------------------ */
 
-					speed_filtered[0] = speed_aposteriori[0];
-					speed_filtered[1] = speed_aposteriori[2];
+
 
 					if (update_initialized) {
 						position_update[0] = filtered_flow.sumx - position_last[0];
@@ -448,17 +467,35 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					position_last[1] = filtered_flow.sumy;
 					yaw_last = att.yaw;
 
-					wallEstimationFilter(radar_filtered_k, radar_weights_k, omni_left_filtered, omni_right_filtered,
-							front_distance_filtered, speed_filtered, position_update, yaw_update, filter_settings,
-							angles_sin, unit_vectors, ((bool) params.with_sonar), ((bool) params.with_pos_update),
-							radar, radar_filtered, radar_weights);
-					memcpy(radar_filtered_k, radar_filtered, sizeof(radar_filtered));
-					memcpy(radar_weights_k, radar_weights, sizeof(radar_weights));
+					if (params.with_lp_filter)
+					{
+						wallEstimationFilter(radar_filtered_k, radar_weights_k, omni_left_filtered, weight_left,
+								omni_right_filtered, weight_right, front_distance_filtered, speed_filtered, position_update,
+								yaw_update, params.filter_settings, angles_sin, unit_vectors, ((bool) params.with_sonar),
+								((bool) params.with_pos_update), radar, radar_filtered, radar_weights);
+						memcpy(radar_filtered_k, radar_filtered, sizeof(radar_filtered));
+						memcpy(radar_weights_k, radar_weights, sizeof(radar_weights));
 
-					for (int i = 0; i<32; i++) {
-						discrete_radar.distances[i] = (int16_t)(radar_filtered[i] * 1000);
-//						discrete_radar.distances[i] = (int16_t)(radar_weights[i] * 1000);
+						for (int i = 0; i<32; i++)
+						{
+							discrete_radar.distances[i] = (int16_t)(radar_filtered[i] * 1000);
+						}
 					}
+					else
+					{
+						wallEstimationFilter2(wall_hist_left_k, wall_hist_right_k, omni_left_filtered, weight_left,
+								omni_right_filtered, weight_right, speed_filtered, position_update, yaw_update,
+								params.filter_settings2, angles_sin, unit_vectors, ((bool) params.with_pos_update),
+								radar, wall_hist_left, wall_hist_right);
+						memcpy(wall_hist_left_k, wall_hist_left, sizeof(wall_hist_left));
+						memcpy(wall_hist_right_k, wall_hist_right, sizeof(wall_hist_right));
+
+						for (int i = 0; i<32; i++)
+						{
+							discrete_radar.distances[i] = (int16_t)(radar[i] * 1000);
+						}
+					}
+
 //					discrete_radar.sonar = front_distance_filtered;
 					discrete_radar.sonar = omni_flow.front_distance_m;
 

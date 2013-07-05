@@ -1,14 +1,14 @@
 /*
- * wallEstimationFilter_types.h
+ * wallEstimationFilter2_types.h
  *
  * Code generation for function 'frontFlowKalmanFilter'
  *
- * C source code generated on: Tue Jun 25 15:14:01 2013
+ * C source code generated on: Fri Jul  5 14:52:28 2013
  *
  */
 
-#ifndef __WALLESTIMATIONFILTER_TYPES_H__
-#define __WALLESTIMATIONFILTER_TYPES_H__
+#ifndef __WALLESTIMATIONFILTER2_TYPES_H__
+#define __WALLESTIMATIONFILTER2_TYPES_H__
 
 /* Type Definitions */
 #ifndef struct_emxArray_int32_T_10
@@ -49,4 +49,4 @@ typedef struct emxArray_real32_T_10 emxArray_real32_T_10;
 #endif /*typedef_emxArray_real32_T_10*/
 
 #endif
-/* End of code generation (wallEstimationFilter_types.h) */
+/* End of code generation (wallEstimationFilter2_types.h) */
