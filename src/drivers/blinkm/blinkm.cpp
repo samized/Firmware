@@ -669,7 +669,6 @@ BlinkM::led()
 
 		if(!topic_initialized) {
 			discrete_radar_sub_fd = orb_subscribe(ORB_ID(discrete_radar));
-			orb_set_interval(discrete_radar_sub_fd, 1000);
 
 			set_fade_speed(150);
 			led_interval = 50;
@@ -680,13 +679,11 @@ BlinkM::led()
 		struct discrete_radar_s discrete_radar_raw;
 		memset(&discrete_radar_raw, 0, sizeof(discrete_radar_raw));
 
-		bool new_data_discrete_radar;
-
-		orb_check(vehicle_status_sub_fd, &new_data_discrete_radar);
+		bool new_data_discrete_radar = false;
 
 		orb_check(discrete_radar_sub_fd, &new_data_discrete_radar);
 
-		if (discrete_radar_sub_fd) {
+		if (new_data_discrete_radar) {
 			orb_copy(ORB_ID(discrete_radar), discrete_radar_sub_fd, &discrete_radar_raw);
 			no_data_discrete_radar = 0;
 		} else {
@@ -719,6 +716,13 @@ BlinkM::led()
 			}
 
 			setLEDGradient(gradient);
+
+			// DEBUG
+//			led_thread_runcount++;
+//			if (led_thread_runcount>100)
+//				led_thread_runcount = 0;
+//
+//			setLEDGradient(led_thread_runcount);
 
 		} else {
 			setLEDColor(LED_WHITE);
