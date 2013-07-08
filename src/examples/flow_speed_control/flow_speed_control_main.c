@@ -99,7 +99,7 @@ usage(const char *reason)
  * Makefile does only apply to this management task.
  * 
  * The actual stack size should be set in the call
- * to task_spawn().
+ * to task_spawn_cmd().
  */
 int flow_speed_control_main(int argc, char *argv[])
 {
@@ -116,10 +116,10 @@ int flow_speed_control_main(int argc, char *argv[])
 		}
 
 		thread_should_exit = false;
-		deamon_task = task_spawn("flow_speed_control",
+		deamon_task = task_spawn_cmd("flow_speed_control",
 					 SCHED_DEFAULT,
 					 SCHED_PRIORITY_MAX - 6,
-					 4096,
+					 2048,
 					 flow_speed_control_thread_main,
 					 (argv) ? (const char **)&argv[2] : (const char **)NULL);
 		exit(0);
@@ -153,9 +153,11 @@ flow_speed_control_thread_main(int argc, char *argv[])
 	printf("[flow speed control] starting\n");
 
 	uint32_t counter = 0;
+	const float time_scale = powf(10.0f,-6.0f);
 
 	/* structures */
 	struct vehicle_status_s vstatus;
+	struct vehicle_attitude_s att;
 	struct filtered_bottom_flow_s filtered_flow;
 	struct vehicle_bodyframe_speed_setpoint_s speed_sp;
 
@@ -176,6 +178,12 @@ flow_speed_control_thread_main(int argc, char *argv[])
 	struct flow_speed_control_param_handles param_handles;
 	parameters_init(&param_handles);
 	parameters_update(&param_handles, &params);
+
+	/* states */
+	float integrated_local_speed_err_x = 0.0f;
+	float integrated_local_speed_err_y = 0.0f;
+	static uint64_t time_last_flow = 0; // in ms
+	static float dt = 0.0f; // seconds
 
 	/* register the perf counter */
 	perf_counter_t mc_loop_perf = perf_alloc(PC_ELAPSED, "flow_speed_control_runtime");
@@ -228,6 +236,8 @@ flow_speed_control_thread_main(int argc, char *argv[])
 
 					/* get a local copy of the vehicle state */
 					orb_copy(ORB_ID(vehicle_status), vehicle_status_sub, &vstatus);
+					/* get a local copy of the vehicle attitude */
+					orb_copy(ORB_ID(vehicle_attitude), vehicle_attitude_sub, &att);
 					/* get a local copy of filtered bottom flow */
 					orb_copy(ORB_ID(filtered_bottom_flow), filtered_bottom_flow_sub, &filtered_flow);
 					/* get a local copy of bodyframe speed setpoint */
@@ -235,9 +245,43 @@ flow_speed_control_thread_main(int argc, char *argv[])
 
 					if (vstatus.state_machine == SYSTEM_STATE_AUTO)
 					{
+						/* calc dt between speed setpoints */
+						if(time_last_flow == 0)
+						{
+							/* ignore first msg */
+							time_last_flow = speed_sp.timestamp;
+							continue;
+						}
+						dt = (float)(speed_sp.timestamp - time_last_flow) * time_scale ;
+						time_last_flow = speed_sp.timestamp;
+
+						float speed_err_body_x = speed_sp.vx - filtered_flow.vx;
+						float speed_err_body_y = speed_sp.vy - filtered_flow.vy;
+
+						/* calc integrated local speed error */
+						float speed_err_local_x = att.R[0][0] * speed_err_body_x + att.R[0][1] * speed_err_body_y;
+						float speed_err_local_y = att.R[1][0] * speed_err_body_x + att.R[1][1] * speed_err_body_y;
+
+						integrated_local_speed_err_x += speed_err_local_x * dt;
+						integrated_local_speed_err_y += speed_err_local_y * dt;
+
+						if (speed_sp.thrust_sp < 0.1f)
+						{
+							/* reset integral if on ground */
+							integrated_local_speed_err_x = 0.0f;
+							integrated_local_speed_err_y = 0.0f;
+						}
+
+						/* calc bodyframe PID I-part */
+						float integrated_body_speed_err_x = att.R[0][0] * integrated_local_speed_err_x +
+								att.R[1][0] * integrated_local_speed_err_y;
+						float integrated_body_speed_err_y = att.R[0][1] * integrated_local_speed_err_x +
+								att.R[1][1] * integrated_local_speed_err_y;
+
+
 						/* calc new roll/pitch */
-						float pitch_body = -(speed_sp.vx - filtered_flow.vx) * params.speed_p;
-						float roll_body  =  (speed_sp.vy - filtered_flow.vy) * params.speed_p;
+						float pitch_body = -(speed_err_body_x * params.speed_p + integrated_body_speed_err_x * params.speed_i);
+						float roll_body  =   speed_err_body_y * params.speed_p + integrated_body_speed_err_y * params.speed_i;
 
 						/* limit roll and pitch corrections */
 						if((pitch_body <= params.limit_pitch) && (pitch_body >= -params.limit_pitch))

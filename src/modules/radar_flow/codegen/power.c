@@ -3,7 +3,7 @@
  *
  * Code generation for function 'power'
  *
- * C source code generated on: Wed May  8 17:06:46 2013
+ * C source code generated on: Fri Jul  5 14:52:28 2013
  *
  */
 
@@ -11,6 +11,7 @@
 #include "rt_nonfinite.h"
 #include "frontFlowKalmanFilter.h"
 #include "wallEstimationFilter.h"
+#include "wallEstimationFilter2.h"
 #include "power.h"
 
 /* Type Definitions */

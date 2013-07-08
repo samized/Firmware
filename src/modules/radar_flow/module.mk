@@ -37,18 +37,21 @@
 
 MODULE_COMMAND		= radar_flow
 
-SRCS		 = radar_flow.c \
+SRCS		 = radar_flow_main.c \
 		   radar_flow_params.c \
 		   radar_sounds.c \
 		   codegen/any.c \
+		   codegen/diag.c \
 		   codegen/frontFlowKalmanFilter.c \
 		   codegen/mean.c \
+		   codegen/mod.c \
 		   codegen/mldivide.c \
 		   codegen/power.c \
 		   codegen/rt_nonfinite.c \
 		   codegen/rtGetInf.c \
 		   codegen/rtGetNaN.c \
 		   codegen/sum.c \
-		   codegen/wallEstimationFilter_initialize.c \
-		   codegen/wallEstimationFilter_terminate.c \
-		   codegen/wallEstimationFilter.c
+		   codegen/wallEstimationFilter.c \
+		   codegen/wallEstimationFilter2_initialize.c \
+		   codegen/wallEstimationFilter2_terminate.c \
+		   codegen/wallEstimationFilter2.c
