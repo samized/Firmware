@@ -116,7 +116,7 @@ int radar_flow_main(int argc, char *argv[])
 //		8162
 //		12158
 		thread_should_exit = false;
-		daemon_task = task_spawn("radar_flow",
+		daemon_task = task_spawn_cmd("radar_flow",
 					 SCHED_RR,
 					 SCHED_PRIORITY_MAX - 50,
 					 8162,

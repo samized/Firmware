@@ -120,7 +120,7 @@ int mission_commander_flow_main(int argc, char *argv[])
 		}
 
 		thread_should_exit = false;
-		daemon_task = task_spawn("mission_commander_flow",
+		daemon_task = task_spawn_cmd("mission_commander_flow",
 					 SCHED_RR,
 					 SCHED_PRIORITY_MAX - 60,
 					 4096,

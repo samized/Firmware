@@ -107,7 +107,7 @@ int flow_position_estimator_main(int argc, char *argv[])
 		}
 
 		thread_should_exit = false;
-		daemon_task = task_spawn("flow_position_estimator",
+		daemon_task = task_spawn_cmd("flow_position_estimator",
 					 SCHED_RR,
 					 SCHED_PRIORITY_MAX - 5,
 					 2048,

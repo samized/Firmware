@@ -119,7 +119,7 @@ int flow_position_control2_main(int argc, char *argv[])
 		}
 
 		thread_should_exit = false;
-		deamon_task = task_spawn("flow_position_control2",
+		deamon_task = task_spawn_cmd("flow_position_control2",
 					 SCHED_DEFAULT,
 					 SCHED_PRIORITY_MAX - 6,
 					 2048,
