@@ -99,7 +99,7 @@ usage(const char *reason)
  * Makefile does only apply to this management task.
  * 
  * The actual stack size should be set in the call
- * to task_spawn().
+ * to task_spawn_cmd().
  */
 int flow_speed_control_main(int argc, char *argv[])
 {
