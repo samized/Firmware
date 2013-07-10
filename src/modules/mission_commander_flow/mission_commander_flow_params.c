@@ -47,7 +47,6 @@ PARAM_DEFINE_FLOAT(MCF_MISS_YOFF, 0.0f);
 PARAM_DEFINE_FLOAT(MCF_MISS_STEP_X, 0.003f);
 PARAM_DEFINE_FLOAT(MCF_MISS_STEP_Y, 0.001f);
 PARAM_DEFINE_FLOAT(MCF_MISS_S_YAW, 0.004f);
-PARAM_DEFINE_FLOAT(MCF_MISS_YAW_TH, 0.1f);
 PARAM_DEFINE_FLOAT(MCF_MISS_WP_R, 0.4f);
 PARAM_DEFINE_INT32(MCF_MIN_FDIST, 1000);
 PARAM_DEFINE_INT32(MCF_MIN_FSDIST, 1500);
@@ -71,7 +70,6 @@ int parameters_init(struct mission_commander_flow_param_handles *h)
 	h->mission_update_step_x			=	param_find("MCF_MISS_STEP_X");
 	h->mission_update_step_y			=	param_find("MCF_MISS_STEP_Y");
 	h->mission_update_step_yaw			=	param_find("MCF_MISS_S_YAW");
-	h->mission_yaw_thld					=	param_find("MCF_MISS_YAW_TH");
 	h->mission_wp_radius				=	param_find("MCF_MISS_WP_R");
 	h->mission_min_front_dist			=	param_find("MCF_MIN_FDIST");
 	h->mission_min_front_side_dist		=	param_find("MCF_MIN_FSDIST");
@@ -80,10 +78,6 @@ int parameters_init(struct mission_commander_flow_param_handles *h)
 	h->mission_react_front_side_dist	=	param_find("MCF_REAC_FSDIST");
 	h->mission_react_side_dist			=	param_find("MCF_REAC_SDIST");
 	h->mission_use_sonar				=	param_find("MCF_USE_SONAR");
-	h->reaction_min_react_angle			=	param_find("MCF_REAC_ANG");
-	h->reaction_min_overreact_angle 	=	param_find("MCF_REAC_O_ANG");
-	h->reaction_min_pass_distance		=	param_find("MCF_REAC_PASS");
-	h->reaction_min_free_distance		=	param_find("MCF_REAC_FREE");
 	h->debug							=	param_find("MCF_DEBUG");
 	h->manual_threshold 				=	param_find("FPC_MAN_THR");
 	h->rc_scale_pitch					=   param_find("RC_SCALE_PITCH");
@@ -100,7 +94,6 @@ int parameters_update(const struct mission_commander_flow_param_handles *h, stru
 	param_get(h->mission_update_step_x, &(p->mission_update_step_x));
 	param_get(h->mission_update_step_y, &(p->mission_update_step_y));
 	param_get(h->mission_update_step_yaw, &(p->mission_update_step_yaw));
-	param_get(h->mission_yaw_thld, &(p->mission_yaw_thld));
 	param_get(h->mission_wp_radius, &(p->mission_wp_radius));
 	param_get(h->mission_min_front_dist, &(p->mission_min_front_dist));
 	param_get(h->mission_min_front_side_dist, &(p->mission_min_front_side_dist));
@@ -109,25 +102,15 @@ int parameters_update(const struct mission_commander_flow_param_handles *h, stru
 	param_get(h->mission_react_front_side_dist, &(p->mission_react_front_side_dist));
 	param_get(h->mission_react_side_dist, &(p->mission_react_side_dist));
 	param_get(h->mission_use_sonar, &(p->mission_use_sonar));
-	param_get(h->reaction_min_react_angle, &(p->reaction_min_react_angle));
-	param_get(h->reaction_min_overreact_angle, &(p->reaction_min_overreact_angle));
-	param_get(h->reaction_min_pass_distance, &(p->reaction_min_pass_distance));
-	param_get(h->reaction_min_free_distance, &(p->reaction_min_free_distance));
 	param_get(h->debug, &(p->debug));
 	param_get(h->manual_threshold, &(p->manual_threshold));
 	param_get(h->rc_scale_pitch, &(p->rc_scale_pitch));
 	param_get(h->rc_scale_roll, &(p->rc_scale_roll));
 	param_get(h->rc_scale_yaw, &(p->rc_scale_yaw));
 
-	/* calc counters from other parameters */
-	p->counter_react_angle = (int)(p->reaction_min_react_angle / p->mission_update_step_yaw);
-	p->counter_overreact_angle = (int)(p->reaction_min_overreact_angle / p->mission_update_step_yaw);
-	p->counter_pass_distance = (int)(p->reaction_min_pass_distance / p->mission_update_step_x);
-	p->counter_free_distance = (int)(p->reaction_min_free_distance / p->mission_update_step_x);
-
 	/* fill radar control settings */
 	p->radarControlSettings[0] = p->mission_update_step_x; // max x-step
-	p->radarControlSettings[1] = p->mission_update_step_y; // TODO make a seperate y step
+	p->radarControlSettings[1] = p->mission_update_step_y; // max y-step
 	p->radarControlSettings[2] = p->mission_update_step_yaw; // max yaw-step
 	p->radarControlSettings[3] = (float) p->mission_react_side_dist; // react side distance
 	p->radarControlSettings[4] = (float) p->mission_react_front_side_dist; // react front side distance

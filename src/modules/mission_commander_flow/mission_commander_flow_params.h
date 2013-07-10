@@ -49,7 +49,6 @@ struct mission_commander_flow_params {
 	float mission_update_step_x; // in m
 	float mission_update_step_y; // in m
 	float mission_update_step_yaw; // in rad
-	float mission_yaw_thld; // in rad
 	float mission_wp_radius; // in m
 	int mission_min_front_dist; // in mm
 	int mission_min_front_side_dist; // in mm
@@ -58,16 +57,8 @@ struct mission_commander_flow_params {
 	int mission_react_front_side_dist; // in mm
 	int mission_react_side_dist; // in mm
 	int mission_use_sonar; // bool
-	float reaction_min_react_angle;
-	float reaction_min_overreact_angle;
-	float reaction_min_pass_distance;
-	float reaction_min_free_distance;
-	int counter_react_angle;
-	int counter_overreact_angle;
-	int counter_pass_distance;
-	int counter_free_distance;
 	float radarControlSettings[10];
-	int debug; // boolean if mission planning manually
+	int debug; // boolean if mission has no final destination
 	float manual_threshold;
 	float rc_scale_pitch;
 	float rc_scale_roll;
@@ -80,7 +71,6 @@ struct mission_commander_flow_param_handles {
 	param_t mission_update_step_x;
 	param_t mission_update_step_y;
 	param_t mission_update_step_yaw;
-	param_t mission_yaw_thld;
 	param_t mission_wp_radius;
 	param_t mission_min_front_dist;
 	param_t mission_min_front_side_dist;
@@ -89,10 +79,6 @@ struct mission_commander_flow_param_handles {
 	param_t mission_react_front_side_dist;
 	param_t mission_react_side_dist;
 	param_t mission_use_sonar;
-	param_t reaction_min_react_angle;
-	param_t reaction_min_overreact_angle;
-	param_t reaction_min_pass_distance;
-	param_t reaction_min_free_distance;
 	param_t debug;
 	param_t manual_threshold;
 	param_t rc_scale_pitch;

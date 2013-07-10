@@ -550,25 +550,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 										/* we need flow... step by step */
 										bodyframe_pos_sp.x = params.mission_update_step_x;
 
-//									if (fabsf(yaw_sp_error) > params.mission_yaw_thld && !mission_state.final_sequence) {
-//
-//										/* we need flow... step by step */
-//										bodyframe_pos_sp.x = bodyframe_pos_sp.x + params.mission_update_step_x;
-//
-//										/* is setpoint already correct */
-//
-//
-//										if (yaw_sp_error > 0 &&  ) {
-//											bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw + params.mission_update_step_yaw;
-//										} else {
-//											bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw - params.mission_update_step_yaw;
-//										}
-
 									} else {
-
-										/* calc offsets to final destination*/
-//										float wp_bodyframe_offset_x = final_dest_bodyframe.x - bodyframe_pos_sp.x;
-//										float wp_bodyframe_offset_y = final_dest_bodyframe.y - bodyframe_pos_sp.y;
 
 										/* final mission sequence? */
 										if(!mission_state.final_sequence){
@@ -604,6 +586,14 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 											bodyframe_pos_sp.x = sign(x_steps) * params.mission_update_step_x;
 											float update_step_y = final_dest_bodyframe.y / fabsf((float) x_steps);
 											bodyframe_pos_sp.y = update_step_y;
+
+											if (mission_state.final_sequence) {
+												/* calc final destination because bodyframe setpoint
+												 * is no longer updated due to attitude (RotM) problems
+												 * */
+												final_dest_bodyframe.x -= bodyframe_pos_sp.x;
+												final_dest_bodyframe.y -= bodyframe_pos_sp.y;
+											}
 
 										}
 									}
