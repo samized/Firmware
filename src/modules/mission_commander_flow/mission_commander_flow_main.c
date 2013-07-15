@@ -70,8 +70,7 @@
 #include <uORB/topics/discrete_radar.h>
 
 #include <uORB/topics/vehicle_global_position.h>
-#include <uORB/topics/vehicle_gps_position.h>
-#include <uORB/topics/vehicle_vicon_position.h>
+//#include <uORB/topics/vehicle_gps_position.h>
 #include <poll.h>
 #include <mavlink/mavlink_log.h>
 
@@ -187,7 +186,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	int vehicle_attitude_sub = orb_subscribe(ORB_ID(vehicle_attitude));
 	int vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	int manual_control_setpoint_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
-	int omnidirectional_flow_sub = orb_subscribe(ORB_ID(omnidirectional_flow));
 	int vehicle_local_position_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 	int discrete_radar_sub = orb_subscribe(ORB_ID(discrete_radar));
 	int vehicle_local_waypoint_sub = orb_subscribe(ORB_ID(vehicle_local_waypoint));
@@ -203,16 +201,13 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	local_pos_sp.z = 0.0f;
 	local_pos_sp.yaw = 0.0f;
 
-	/* for debugging */
-//	struct vehicle_global_position_s debug_pos;
-//	memset(&debug_pos, 0, sizeof(debug_pos));
-//	orb_advert_t debug_pos_pub = orb_advertise(ORB_ID(vehicle_global_position), &debug_pos);
-//	struct vehicle_vicon_position_s vicon_pos;
-//	memset(&vicon_pos, 0, sizeof(vicon_pos));
-//	int vehicle_vicon_bos_sub = orb_subscribe(ORB_ID(vehicle_vicon_position));
-	struct vehicle_gps_position_s debug_pos;
+	/* for debugging (for logging use gps)*/
+	struct vehicle_global_position_s debug_pos;
 	memset(&debug_pos, 0, sizeof(debug_pos));
-	orb_advert_t debug_pos_pub = orb_advertise(ORB_ID(vehicle_gps_position), &debug_pos);
+	orb_advert_t debug_pos_pub = orb_advertise(ORB_ID(vehicle_global_position), &debug_pos);
+//	struct vehicle_gps_position_s debug_pos;
+//	memset(&debug_pos, 0, sizeof(debug_pos));
+//	orb_advert_t debug_pos_pub = orb_advertise(ORB_ID(vehicle_gps_position), &debug_pos);
 
 	mission_sounds_init();
 	bool sensors_ready = false;
@@ -399,8 +394,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 					/* get a local copy of local position */
 					orb_copy(ORB_ID(vehicle_local_position), vehicle_local_position_sub, &local_pos);
 
-//					if (mission_state.state == MISSION_STARTED || params.debug) {
-					if (mission_state.state == MISSION_STARTED) {
+					if (mission_state.state == MISSION_STARTED || params.debug) {
+//					if (mission_state.state == MISSION_STARTED) {
 						/* test if enough space */
 						if ((discrete_radar.sonar * 1000.0f) > params.mission_min_front_dist) {
 
@@ -426,19 +421,21 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 								}
 							}
 
-//							/* DEBUG: LOG AS GPS */
-//							if(mission_state.sonar_obstacle.valid) {
-//
-//								mission_state.debug_value1 = mission_state.sonar_obstacle.sonar_obst_polar_alpha;
-//								mission_state.debug_value2 = mission_state.sonar_obstacle.sonar_obst_polar_r;
-//								mission_state.debug_value3 = mission_state.sonar_obstacle.sonar_obst_pitch;
-//
-//							} else {
-//								mission_state.debug_value1 = 0.0f;
-//								mission_state.debug_value2 = 0.0f;
-//								mission_state.debug_value3 = 0.0f;
-//
-//							}
+
+							if(params.debug) {
+								/* DEBUG: LOG AS GPS */
+								if(mission_state.sonar_obstacle.valid) {
+
+									mission_state.debug_value1 = mission_state.sonar_obstacle.sonar_obst_polar_alpha;
+									mission_state.debug_value2 = mission_state.sonar_obstacle.sonar_obst_polar_r;
+									mission_state.debug_value3 = mission_state.sonar_obstacle.sonar_obst_pitch;
+
+								} else {
+									mission_state.debug_value1 = 0.0f;
+									mission_state.debug_value2 = 0.0f;
+									mission_state.debug_value3 = 0.0f;
+								}
+							}
 
 							do_radar_update(&mission_state, &params, mavlink_fd, &discrete_radar);
 
@@ -500,16 +497,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 
 							/* calc yaw to final destination */
 							float yaw_final = get_yaw(&local_pos, &final_dest_local);
-
-//							float yaw_error = yaw_final - att.yaw;
-//
-//							if (yaw_error > M_PI_F) {
-//								yaw_error -= M_TWOPI_F;
-//
-//							} else if (yaw_error < -M_PI_F) {
-//								yaw_error += M_TWOPI_F;
-//							}
-
 							float yaw_sp_error = yaw_final - bodyframe_pos_sp.yaw;
 
 							if (yaw_sp_error > M_PI_F) {
@@ -536,7 +523,7 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 							} else {
 
 								/* in debug there is no final destination, and no course correction */
-								if ((mission_state.free_to_go || mission_state.final_sequence) && !params.debug) {
+								if ((mission_state.free_to_go || mission_state.final_sequence) && params.mission_with_final_dest) {
 									/* there are no obstacles */
 
 									/* correct yaw if needed */
@@ -615,35 +602,6 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 							local_position_setpoint_changed = true;
 						}
 
-//						/*
-//						 * manually update position setpoint -> e.g. overwrite commands
-//						 * from mission commander if something goes wrong
-//						 */
-//						if(manual.pitch < -0.2f) {
-//							bodyframe_pos_sp.x += params.mission_update_step_x;
-//						} else if (manual.pitch > 0.2f) {
-//							bodyframe_pos_sp.x -= params.mission_update_step_x;
-//						}
-//
-//						if(manual.roll < -0.2f) {
-//							bodyframe_pos_sp.y -= params.mission_update_step_x;
-//						} else if (manual.roll > 0.2f) {
-//							bodyframe_pos_sp.y += params.mission_update_step_x;
-//						}
-//
-//						if(manual.yaw < -1.0f) { // bigger threshold because of rc calibration for manual flight
-//							bodyframe_pos_sp.yaw -= 2.0f * params.mission_update_step_yaw;
-//						} else if (manual.yaw > 1.0f) {
-//							bodyframe_pos_sp.yaw += 2.0f * params.mission_update_step_yaw;
-//						}
-//
-//						/* modulo for rotation -pi +pi */
-//						if(bodyframe_pos_sp.yaw < -M_PI_F) {
-//							bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw + M_TWOPI_F;
-//						} else if(bodyframe_pos_sp.yaw > M_PI_F) {
-//							bodyframe_pos_sp.yaw = bodyframe_pos_sp.yaw - M_TWOPI_F;
-//						}
-
 					} else
 					{
 						/* if back in auto or stabilized mode reset setpoint to current position */
@@ -682,21 +640,21 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 						local_position_setpoint_changed = false;
 					}
 
-
-					/* DEBUG: LOG AS GPS */
-
 					/* TODO remove DEBUG */
-//					debug_pos.alt = mission_state.debug_value1;
-//					debug_pos.relative_alt = mission_state.debug_value2;
-//					debug_pos.lon = mission_state.debug_value3;
-//					debug_pos.lat = mission_state.debug_value4;
+					if(params.debug) {
+						/* DEBUG: LOG AS GLOBAL POS */
+						debug_pos.alt = mission_state.debug_value1;
+						debug_pos.relative_alt = mission_state.debug_value2;
+						debug_pos.lon = mission_state.debug_value3;
+						debug_pos.lat = mission_state.debug_value4;
 
-					debug_pos.lat = (int32_t) mission_state.state;
-					debug_pos.lon = (int32_t) mission_state.sonar_obstacle.valid;
-					debug_pos.alt = (int32_t) mission_state.free_to_go;
+//						debug_pos.lat = (int32_t) mission_state.state;
+//						debug_pos.lon = (int32_t) mission_state.sonar_obstacle.valid;
+//						debug_pos.alt = (int32_t) mission_state.free_to_go;
 
-//					orb_publish(ORB_ID(vehicle_global_position), debug_pos_pub, &debug_pos);
-					orb_publish(ORB_ID(vehicle_gps_position), debug_pos_pub, &debug_pos);
+						orb_publish(ORB_ID(vehicle_global_position), debug_pos_pub, &debug_pos);
+//						orb_publish(ORB_ID(vehicle_gps_position), debug_pos_pub, &debug_pos);
+					}
 
 					/* measure in what intervals the mission commander runs */
 					perf_count(mc_interval_perf);
@@ -744,7 +702,8 @@ int mission_commander_flow_thread_main(int argc, char *argv[])
 	close(vehicle_local_position_sub);
 	close(vehicle_status_sub);
 	close(manual_control_setpoint_sub);
-	close(omnidirectional_flow_sub);
+	close(discrete_radar_sub);
+	close(vehicle_local_waypoint_sub);
 
 	mission_sounds_deinit();
 

@@ -42,6 +42,7 @@
 #include "mission_commander_flow_params.h"
 
 /* commander parameters */
+PARAM_DEFINE_INT32(MCF_MISS_FINAL, 1);
 PARAM_DEFINE_FLOAT(MCF_MISS_XOFF, 3.0f);
 PARAM_DEFINE_FLOAT(MCF_MISS_YOFF, 0.0f);
 PARAM_DEFINE_FLOAT(MCF_MISS_STEP_X, 0.003f);
@@ -55,16 +56,13 @@ PARAM_DEFINE_INT32(MCF_REAC_FDIST, 2000);
 PARAM_DEFINE_INT32(MCF_REAC_FSDIST, 2000);
 PARAM_DEFINE_INT32(MCF_REAC_SDIST, 1000);
 PARAM_DEFINE_INT32(MCF_USE_SONAR, 1);
-PARAM_DEFINE_FLOAT(MCF_REAC_ANG, 0.26f);
-PARAM_DEFINE_FLOAT(MCF_REAC_O_ANG, 0.09f);
-PARAM_DEFINE_FLOAT(MCF_REAC_PASS, 1.0f);
-PARAM_DEFINE_FLOAT(MCF_REAC_FREE, 0.5f);
 PARAM_DEFINE_INT32(MCF_DEBUG, 0);
 
 
 int parameters_init(struct mission_commander_flow_param_handles *h)
 {
 	/* PID parameters */
+	h->mission_with_final_dest			=	param_find("MCF_MISS_FINAL");
 	h->mission_x_offset					=	param_find("MCF_MISS_XOFF");
 	h->mission_y_offset					=	param_find("MCF_MISS_YOFF");
 	h->mission_update_step_x			=	param_find("MCF_MISS_STEP_X");
@@ -89,6 +87,7 @@ int parameters_init(struct mission_commander_flow_param_handles *h)
 
 int parameters_update(const struct mission_commander_flow_param_handles *h, struct mission_commander_flow_params *p)
 {
+	param_get(h->mission_with_final_dest, &(p->mission_with_final_dest));
 	param_get(h->mission_x_offset, &(p->mission_x_offset));
 	param_get(h->mission_y_offset, &(p->mission_y_offset));
 	param_get(h->mission_update_step_x, &(p->mission_update_step_x));

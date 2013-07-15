@@ -189,7 +189,11 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 	printf("[radar] initialized\n");
 
-	uint64_t time_last_flow = 0;
+	const float time_scale = powf(10.0f,-6.0f);
+	static uint64_t time_last_flow = 0;
+	static uint64_t time_last_sonar = 0;
+	static float sonar_last = 0.0f;
+	static uint8_t sonar_invalid_count = 0;
 
 	/* flow filter parameters */
 	static float flow_aposteriori_k[40] = { 0.0f };
@@ -203,6 +207,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 	static float speed[2] = { 0.0f };
 	static float speed_filtered[2] = { 0.0f };
 	static float front_distance_filtered = 5.0f;
+	static float front_distance = 5.0f;
 
 	/* wall estimation parameters */
 	/* angles of sectors -> take from calibration */
@@ -370,6 +375,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 
 					if (time_last_flow == 0){
 						time_last_flow = omni_flow.timestamp;
+						time_last_sonar = omni_flow.timestamp;
 						continue;
 					}
 
@@ -398,8 +404,35 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 					}
 
 					/* filtering data */
-					front_distance_filtered = (1 - params.front_lp_alpha) * front_distance_filtered + params.front_lp_alpha * omni_flow.front_distance_m;
-					float dt = ((float)(omni_flow.timestamp - time_last_flow)) / 1000000.0f; // seconds
+
+					/* we have no indication if the sonar value is new
+					 * because of this we need a workaround
+					 * sonar runs around 10Hz
+					 */
+					float dt_sonar = (float)(omni_flow.timestamp - time_last_sonar) * time_scale ;
+
+					if (omni_flow.front_distance_m != sonar_last || dt_sonar > 0.11f)
+					{
+						time_last_sonar = omni_flow.timestamp;
+
+						// DEBUG 0.3 SPIKE REJECTION
+						if(omni_flow.front_distance_m < 0.31f) {
+							if(sonar_invalid_count > 3)
+								front_distance = omni_flow.front_distance_m;
+							else
+								sonar_invalid_count++;
+						} else {
+							sonar_invalid_count = 0;
+							front_distance = omni_flow.front_distance_m;
+						}
+
+						/* low_pass */
+						front_distance_filtered = (1 - params.front_lp_alpha) * front_distance_filtered + params.front_lp_alpha * front_distance;
+
+						sonar_last = omni_flow.front_distance_m;
+					}
+
+					float dt = ((float)(omni_flow.timestamp - time_last_flow)) * time_scale; // seconds
 					time_last_flow = omni_flow.timestamp;
 					speed[0] = filtered_flow.vx;
 					speed[1] = filtered_flow.vy;
@@ -496,8 +529,7 @@ int radar_flow_thread_main(int argc, char *argv[]) {
 						}
 					}
 
-//					discrete_radar.sonar = front_distance_filtered;
-					discrete_radar.sonar = omni_flow.front_distance_m;
+					discrete_radar.sonar = front_distance;
 
 					distance_left = radar_filtered[8];
 					distance_right = radar_filtered[24];

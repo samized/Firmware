@@ -44,6 +44,7 @@
 #include <systemlib/param/param.h>
 
 struct mission_commander_flow_params {
+	int mission_with_final_dest; //bool
 	float mission_x_offset; // in m
 	float mission_y_offset; // in m
 	float mission_update_step_x; // in m
@@ -58,7 +59,7 @@ struct mission_commander_flow_params {
 	int mission_react_side_dist; // in mm
 	int mission_use_sonar; // bool
 	float radarControlSettings[10];
-	int debug; // boolean if mission has no final destination
+	int debug; // boolean planning without mission running
 	float manual_threshold;
 	float rc_scale_pitch;
 	float rc_scale_roll;
@@ -66,6 +67,7 @@ struct mission_commander_flow_params {
 };
 
 struct mission_commander_flow_param_handles {
+	param_t mission_with_final_dest;
 	param_t mission_x_offset;
 	param_t mission_y_offset;
 	param_t mission_update_step_x;
